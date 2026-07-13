@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>エクササイズ ─ Daily Training Log</title>
+<style>
+  :root{
+    --house:#F7F4EE; --card:#FFFFFF; --line:#E6DFD3;
+    --red:#9E3A46; --red2:#842F39; --ink:#2B2622; --dim:#8A8178;
+    --serif:"Hiragino Mincho ProN","Yu Mincho",YuMincho,serif;
+    --sans:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{margin:0;background:var(--house);color:var(--ink);font-family:var(--sans);
+    min-height:100vh;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:600px;margin:0 auto;padding:28px 18px 110px;}
+  .cue{font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);}
+  h1{font-family:var(--serif);font-size:30px;letter-spacing:.04em;margin:2px 0 0;font-weight:500;}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;}
+  .ico{background:none;border:1px solid var(--line);color:var(--dim);width:40px;height:40px;
+    border-radius:10px;display:grid;place-items:center;cursor:pointer;}
+  .ico:hover{border-color:var(--red);color:var(--red);}
+  .tabs{display:flex;gap:26px;border-bottom:1px solid var(--line);margin-bottom:24px;}
+  .tab{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    background:none;border:none;color:var(--dim);padding:0 0 12px;cursor:pointer;position:relative;}
+  .tab.on{color:var(--ink);}
+  .tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--red);}
+  .sec{margin-bottom:26px;}
+  .lbl{margin-bottom:10px;}
+  .row{display:flex;gap:12px;}
+  input[type=date],input[type=time],input[type=text],textarea{
+    width:100%;background:var(--card);border:1px solid var(--line);color:var(--ink);
+    border-radius:10px;padding:11px 12px;font-family:var(--sans);font-size:14px;outline:none;}
+  input:focus,textarea:focus{border-color:var(--red);}
+  input[type=date],input[type=time]{font-family:var(--mono);}
+  textarea{resize:vertical;min-height:70px;line-height:1.6;}
+  .spot{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:16px;
+    background-image:radial-gradient(130% 90% at 15% 0%,rgba(158,58,70,.07),transparent 62%);
+    box-shadow:0 1px 2px rgba(43,38,34,.04);}
+  .fline{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;}
+  .ftext{font-family:var(--serif);font-size:17px;line-height:1.6;border-left:2px solid var(--red);
+    padding-left:12px;flex:1;}
+  .fx{background:none;border:none;color:var(--dim);cursor:pointer;padding:2px;font-size:16px;line-height:1;}
+  .fx:hover{color:var(--red);}
+  .empty{font-family:var(--serif);font-size:15px;color:var(--dim);font-style:italic;
+    border-left:2px solid var(--line);padding-left:12px;margin-bottom:14px;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+  .chip{font-size:12.5px;background:var(--house);border:1px solid var(--line);color:var(--dim);
+    border-radius:999px;padding:6px 12px;cursor:pointer;}
+  .chip:hover{border-color:var(--red);color:var(--ink);}
+  .chip.on{background:rgba(158,58,70,.10);border-color:var(--red);color:var(--red);}
+  .addrow{display:flex;gap:8px;}
+  .add{background:var(--red);color:#fff;border:none;border-radius:10px;padding:0 16px;
+    font-family:var(--mono);font-size:12px;cursor:pointer;white-space:nowrap;}
+  .add:hover{background:var(--red2);}
+  .ex{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card);}
+  .exrow{padding:13px 14px;border-bottom:1px solid var(--line);}
+  .exrow:last-child{border-bottom:none;}
+  .exrow.done{background:rgba(158,58,70,.04);}
+  .exhead{display:flex;align-items:center;gap:12px;cursor:pointer;}
+  .box{width:22px;height:22px;border:1.5px solid var(--line);border-radius:6px;flex:0 0 auto;
+    display:grid;place-items:center;color:transparent;font-size:13px;font-weight:700;}
+  .box.on{background:var(--red);border-color:var(--red);color:#fff;}
+  .exname{flex:1;font-size:14.5px;}
+  .note{margin-top:9px;width:100%;background:transparent;border:none;
+    border-bottom:1px dashed var(--line);color:var(--dim);font-size:12.5px;
+    font-family:var(--mono);padding:3px 0;border-radius:0;}
+  .note:focus{border-bottom-color:var(--red);color:var(--ink);}
+  .feelrow{display:flex;align-items:center;gap:16px;}
+  input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:4px;border-radius:99px;
+    background:var(--line);outline:none;padding:0;border:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;
+    background:var(--red);cursor:pointer;border:3px solid var(--house);box-shadow:0 0 0 1px var(--red);}
+  input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--red);
+    cursor:pointer;border:3px solid var(--house);}
+  .feelval{font-family:var(--serif);font-size:26px;color:var(--red);min-width:62px;text-align:right;}
+  .feelval span{font-family:var(--mono);font-size:12px;color:var(--dim);}
+  .savebar{position:fixed;left:0;right:0;bottom:0;padding:14px 18px calc(14px + env(safe-area-inset-bottom));
+    background:linear-gradient(to top,var(--house) 62%,transparent);}
+  .save{max-width:600px;margin:0 auto;display:block;width:100%;background:var(--red);color:#fff;
+    border:none;border-radius:12px;padding:15px;font-family:var(--mono);font-size:13px;
+    letter-spacing:.14em;text-transform:uppercase;cursor:pointer;font-weight:600;}
+  .save:hover{background:var(--red2);}
+  .save:disabled{background:var(--line);color:var(--dim);cursor:default;}
+  .sub{display:flex;gap:18px;margin-bottom:20px;flex-wrap:wrap;}
+  .subbtn{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    background:none;border:none;color:var(--dim);cursor:pointer;padding:4px 0;border-bottom:2px solid transparent;}
+  .subbtn.on{color:var(--red);border-bottom-color:var(--red);}
+  .card{border:1px solid var(--line);border-radius:12px;margin-bottom:12px;background:var(--card);overflow:hidden;}
+  .ctop{padding:14px;cursor:pointer;}
+  .cmeta{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;}
+  .date{font-family:var(--mono);font-size:12px;}
+  .badge{font-family:var(--mono);font-size:11px;color:var(--red);}
+  .count{font-family:var(--mono);font-size:11px;color:var(--dim);white-space:nowrap;}
+  .cfocus{font-family:var(--serif);font-size:15px;line-height:1.55;border-left:2px solid var(--red);
+    padding-left:11px;margin:3px 0;}
+  .cbody{padding:0 14px 14px;border-top:1px solid var(--line);}
+  .item{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:13px;color:var(--dim);}
+  .item.d{color:var(--ink);}
+  .tick{width:15px;height:15px;border-radius:4px;border:1px solid var(--line);flex:0 0 auto;
+    display:grid;place-items:center;color:transparent;font-size:9px;font-weight:700;}
+  .tick.d{background:var(--red);border-color:var(--red);color:#fff;}
+  .inote{font-family:var(--mono);font-size:11px;color:var(--dim);margin:-2px 0 4px 24px;}
+  .cmt{font-size:13px;line-height:1.65;margin-top:12px;border-top:1px dashed var(--line);
+    padding-top:12px;white-space:pre-wrap;}
+  .statwrap{border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--card);}
+  .big{font-family:var(--serif);font-size:34px;color:var(--red);line-height:1;}
+  .big span{font-size:14px;color:var(--dim);font-family:var(--mono);}
+  .bar{margin-top:14px;}
+  .barlbl{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px;}
+  .barlbl b{font-family:var(--mono);color:var(--dim);font-weight:400;}
+  .track{height:7px;background:var(--house);border-radius:99px;overflow:hidden;}
+  .fill{height:100%;background:var(--red);border-radius:99px;transition:width .4s;}
+  .eff{border:1px solid var(--line);border-radius:11px;padding:13px 14px;margin-bottom:10px;background:var(--card);}
+  .efftop{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px;}
+  .efftext{font-family:var(--serif);font-size:15px;border-left:2px solid var(--red);padding-left:10px;flex:1;}
+  .effdiff{font-family:var(--mono);font-size:16px;white-space:nowrap;color:var(--dim);}
+  .effdiff.pos{color:var(--red);}
+  .effmeta{font-family:var(--mono);font-size:10.5px;color:var(--dim);}
+  .small{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-bottom:14px;}
+  .cmtcard{border-left:2px solid var(--red);background:var(--card);border-radius:0 10px 10px 0;
+    padding:13px 14px;margin-bottom:11px;border-top:1px solid var(--line);
+    border-right:1px solid var(--line);border-bottom:1px solid var(--line);}
+  .cmtdate{font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:7px;}
+  .cmttext{font-size:13.5px;line-height:1.65;white-space:pre-wrap;}
+  .blank{text-align:center;color:var(--dim);font-family:var(--serif);font-style:italic;
+    font-size:15px;line-height:1.7;padding:48px 20px;}
+  .scrim{position:fixed;inset:0;background:rgba(43,38,34,.40);display:flex;align-items:flex-end;
+    justify-content:center;z-index:50;}
+  .sheet{background:var(--house);border:1px solid var(--line);border-radius:18px 18px 0 0;width:100%;
+    max-width:600px;max-height:86vh;overflow-y:auto;padding:20px 18px 40px;}
+  .sheethead{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
+  .sheettitle{font-family:var(--serif);font-size:20px;}
+  .mlist{display:flex;flex-direction:column;gap:8px;margin:10px 0 14px;}
+  .mrow{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);
+    border-radius:9px;padding:8px 10px;}
+  .mname{flex:1;font-size:13.5px;}
+  .mname.s{font-family:var(--serif);font-size:14px;}
+  .mi{background:none;border:none;color:var(--dim);cursor:pointer;padding:4px 6px;font-size:14px;line-height:1;}
+  .mi:hover{color:var(--red);}
+  .mi.on{color:var(--red);}
+  .ghost{margin-top:10px;width:100%;background:none;border:1px solid var(--line);color:var(--dim);
+    border-radius:9px;padding:11px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;cursor:pointer;}
+  .ghost:hover{border-color:var(--red);color:var(--red);}
+  .toast{position:fixed;bottom:92px;left:50%;transform:translateX(-50%);background:var(--red);color:#fff;
+    font-family:var(--mono);font-size:12px;padding:10px 18px;border-radius:99px;z-index:60;
+    box-shadow:0 4px 14px rgba(43,38,34,.2);}
+  .warn{background:#FBF3E7;border:1px solid #E8D6B8;color:#7A5B22;border-radius:9px;padding:10px 12px;
+    font-size:12px;line-height:1.6;margin-bottom:18px;font-family:var(--mono);}
+  .syncdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dim);margin-right:6px;}
+  .syncdot.on{background:#3f8a52;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <div class="cue">Daily Training · Solo</div>
+      <h1>エクササイズ</h1>
+    </div>
+    <button class="ico" id="gear" aria-label="設定">⚙</button>
+  </div>
+  <div class="tabs">
+    <button class="tab on" data-tab="record">記録</button>
+    <button class="tab" data-tab="review">まとめ</button>
+  </div>
+  <div id="view"></div>
+</div>
+<div class="savebar" id="savebar">
+  <button class="save" id="saveBtn" disabled>記録を保存</button>
+</div>
+<div id="modal"></div>
+<div id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ---------- firebase (fill these in from the Firebase console → project settings) ---------- */
+var firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+var fbReady = firebaseConfig.apiKey.indexOf("YOUR_") !== 0;
+var db=null, uidRef=null, synced=false;
+
+/* ---------- storage (localStorage + memory fallback, used as offline cache) ---------- */
+var mem={}, canStore=true;
+try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); }catch(e){ canStore=false; }
+function load(k,d){ try{ var v=canStore?localStorage.getItem(k):mem[k]; return v?JSON.parse(v):d; }catch(e){ return d; } }
+function save(k,v){ try{ var s=JSON.stringify(v); if(canStore)localStorage.setItem(k,s); else mem[k]=s; }catch(e){} }
+
+/* ---------- defaults ---------- */
+var DEF_EX=[
+  {id:"e1",name:"リラクゼーション"},
+  {id:"e2",name:"オープンナップ"},
+  {id:"e3",name:"ワイド・ブロードムーブメント"},
+  {id:"e4",name:"センター"},
+  {id:"e5",name:"クオリティ"}
+];
+var DEF_PRE=[
+  {id:"p1",text:"相手の言葉を本当に聞く",pinned:true},
+  {id:"p2",text:"結果を急がない",pinned:false},
+  {id:"p3",text:"呼吸を止めない",pinned:false},
+  {id:"p4",text:"身体から始める",pinned:false},
+  {id:"p5",text:"判断せずに、ただ在る",pinned:false}
+];
+
+/* ---------- state ---------- */
+var exercises=load("act:exercises",DEF_EX);
+var presets=load("act:presets",DEF_PRE);
+var sessions=load("act:sessions",[]);
+var tab="record", sub="history", expanded=null;
+var draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",feel:50};
+
+function persist(){
+  save("act:exercises",exercises); save("act:presets",presets); save("act:sessions",sessions);
+  if(uidRef) db.collection("users").doc(uidRef).set({exercises:exercises,presets:presets},{merge:true});
+}
+function cloudSaveSession(s){ if(uidRef) db.collection("users").doc(uidRef).collection("sessions").doc(s.id).set(s); }
+function cloudDeleteAllSessions(){
+  if(!uidRef) return;
+  var col=db.collection("users").doc(uidRef).collection("sessions");
+  col.get().then(function(qs){ var batch=db.batch(); qs.forEach(function(d){ batch.delete(d.ref); }); batch.commit(); });
+}
+function cloudAddSessions(list){
+  if(!uidRef) return;
+  var col=db.collection("users").doc(uidRef).collection("sessions");
+  var batch=db.batch(); list.forEach(function(s){ batch.set(col.doc(s.id), s); }); batch.commit();
+}
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+function pad(n){ return (n<10?"0":"")+n; }
+function today(){ var d=new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function now(){ var d=new Date(); return pad(d.getHours())+":"+pad(d.getMinutes()); }
+function fmt(s){ var p=s.split("-"); return p[0]+"."+p[1]+"."+p[2]; }
+function esc(s){ return String(s).replace(/[&<>"']/g,function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
+function toast(m){ var t=document.getElementById("toast");
+  t.innerHTML='<div class="toast">'+esc(m)+'</div>';
+  setTimeout(function(){ t.innerHTML=""; },1700); }
+
+/* ---------- firebase sync ---------- */
+function startSync(u){
+  uidRef=u;
+  var userDoc=db.collection("users").doc(u);
+  userDoc.get().then(function(snap){
+    if(!snap.exists){
+      userDoc.set({exercises:exercises,presets:presets});
+      if(sessions.length) cloudAddSessions(sessions);
+    }
+  });
+  userDoc.onSnapshot(function(snap){
+    if(!snap.exists) return;
+    var d=snap.data();
+    if(d.exercises) exercises=d.exercises;
+    if(d.presets) presets=d.presets;
+    save("act:exercises",exercises); save("act:presets",presets);
+    render();
+  });
+  userDoc.collection("sessions").onSnapshot(function(qs){
+    var list=[];
+    qs.forEach(function(doc){ list.push(doc.data()); });
+    list.sort(function(a,b){
+      if(a.date!==b.date) return a.date<b.date?1:-1;
+      return a.time<b.time?1:-1;
+    });
+    sessions=list; save("act:sessions",sessions);
+    synced=true; render();
+  });
+}
+if(fbReady){
+  firebase.initializeApp(firebaseConfig);
+  db=firebase.firestore();
+  firebase.auth().onAuthStateChanged(function(user){
+    if(user) startSync(user.uid);
+  });
+  firebase.auth().signInAnonymously().catch(function(){ toast("同期に失敗しました"); });
+}
+
+/* ---------- sample data (opt-in) ---------- */
+function sample(){
+  var base=new Date();
+  function day(b){ var d=new Date(base); d.setDate(d.getDate()-b);
+    return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function mk(b,t,f,fo,fe,c){
+    return {id:uid(),date:day(b),time:t,feel:fe,focus:fo,comment:c||"",
+      items:DEF_EX.map(function(e,i){ return {exId:e.id,name:e.name,done:!!f[i],note:""}; })};
+  }
+  return [
+    mk(0,"07:40",[1,1,1,1,0],["相手の言葉を本当に聞く","呼吸を止めない"],82,"オープンナップで肩が緩んでから声が通った。"),
+    mk(1,"08:10",[1,1,0,1,1],["身体から始める"],68,""),
+    mk(2,"07:55",[1,1,1,0,1],["結果を急がない","呼吸を止めない"],75,"クオリティに入る前に焦った。途中で気づいて戻せた。"),
+    mk(4,"22:30",[1,0,1,1,0],["判断せずに、ただ在る"],58,"夜にやると集中が散る。"),
+    mk(5,"07:30",[1,1,1,1,1],["相手の言葉を本当に聞く","結果を急がない"],88,"全部通せた日。センターが安定していた。"),
+    mk(7,"08:00",[1,1,0,0,0],[],52,"時間がなくて駆け足。"),
+    mk(8,"07:45",[1,1,1,1,0],["呼吸を止めない","身体から始める"],79,""),
+    mk(10,"09:00",[0,1,1,1,1],["相手の言葉を本当に聞く"],84,"ワイドムーブメントで視野が開いた。"),
+    mk(11,"07:50",[1,1,1,0,0],["結果を急がない"],63,""),
+    mk(13,"08:20",[1,0,1,1,1],["判断せずに、ただ在る","呼吸を止めない"],71,"ジャッジが減ると楽になる。"),
+    mk(16,"07:35",[1,1,1,1,1],["相手の言葉を本当に聞く","身体から始める"],90,"久々に良い手応え。"),
+    mk(19,"08:05",[1,1,0,1,0],[],55,"なんとなくで終わった。意識を決めていなかった。"),
+    mk(22,"07:40",[1,1,1,0,1],["結果を急がない","相手の言葉を本当に聞く"],77,"")
+  ];
+}
+
+/* ---------- render ---------- */
+var view=document.getElementById("view");
+var savebar=document.getElementById("savebar");
+var saveBtn=document.getElementById("saveBtn");
+
+function hasContent(){
+  var any=false; for(var k in draft.done){ if(draft.done[k]) any=true; }
+  return any || draft.focus.length>0 || draft.comment.trim()!=="";
+}
+
+function render(){
+  savebar.style.display = tab==="record" ? "block" : "none";
+  document.getElementById("gear").style.visibility = tab==="record" ? "visible" : "hidden";
+  view.innerHTML = tab==="record" ? recordHTML() : reviewHTML();
+  if(tab==="record"){ bindRecord(); saveBtn.disabled=!hasContent(); }
+  else bindReview();
+}
+
+function recordHTML(){
+  var sorted=presets.slice().sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0); });
+  var h="";
+  if(!canStore) h+='<div class="warn">このプレビューでは保存できません。HTMLファイルをブラウザで開けば記録は端末に保存されます。</div>';
+  if(!fbReady) h+='<div class="warn">Firebase未設定：今はこの端末にのみ保存されています。設定すると全端末で同期されます。</div>';
+  else h+='<div class="small"><span class="syncdot'+(synced?" on":"")+'"></span>'+(synced?"クラウドに同期済み":"同期中…")+'</div>';
+
+  h+='<div class="sec"><div class="cue lbl">日時</div><div class="row">'
+   + '<input type="date" id="d" value="'+draft.date+'">'
+   + '<input type="time" id="t" value="'+draft.time+'" style="max-width:130px">'
+   + '</div></div>';
+
+  h+='<div class="sec"><div class="cue lbl">今日意識すること</div><div class="spot">';
+  if(draft.focus.length){
+    draft.focus.forEach(function(f){
+      h+='<div class="fline"><div class="ftext">'+esc(f)+'</div>'
+       + '<button class="fx" data-unfocus="'+esc(f)+'">✕</button></div>';
+    });
+  } else h+='<div class="empty">下の定型から選ぶか、新しく書き起こす。</div>';
+  h+='<div class="chips">';
+  sorted.forEach(function(p){
+    var on=draft.focus.indexOf(p.text)>=0;
+    h+='<button class="chip'+(on?" on":"")+'" data-focus="'+esc(p.text)+'">'+(p.pinned?"★ ":"")+esc(p.text)+'</button>';
+  });
+  h+='</div><div class="addrow"><input type="text" id="nf" placeholder="新しく書く…">'
+   + '<button class="add" id="addF">＋ 追加</button></div></div></div>';
+
+  h+='<div class="sec"><div class="cue lbl">本日のメニュー</div><div class="ex">';
+  exercises.forEach(function(e){
+    var on=!!draft.done[e.id];
+    h+='<div class="exrow'+(on?" done":"")+'">'
+     + '<div class="exhead" data-toggle="'+e.id+'"><div class="box'+(on?" on":"")+'">✓</div>'
+     + '<div class="exname">'+esc(e.name)+'</div></div>'
+     + '<input class="note" type="text" placeholder="メモ…" data-note="'+e.id+'" value="'+esc(draft.notes[e.id]||"")+'">'
+     + '</div>';
+  });
+  h+='</div></div>';
+
+  h+='<div class="sec"><div class="cue lbl">コメント</div>'
+   + '<textarea id="cm" placeholder="今日の訓練を振り返って…">'+esc(draft.comment)+'</textarea></div>';
+
+  h+='<div class="sec"><div class="cue lbl">手応え</div><div class="feelrow">'
+   + '<input type="range" id="fe" min="0" max="100" step="5" value="'+draft.feel+'">'
+   + '<span class="feelval" id="fv">'+draft.feel+'<span>%</span></span></div></div>';
+  return h;
+}
+
+function bindRecord(){
+  document.getElementById("d").onchange=function(){ draft.date=this.value; };
+  document.getElementById("t").onchange=function(){ draft.time=this.value; };
+  document.getElementById("cm").oninput=function(){ draft.comment=this.value; saveBtn.disabled=!hasContent(); };
+  var fe=document.getElementById("fe");
+  fe.oninput=function(){ draft.feel=+this.value; document.getElementById("fv").innerHTML=this.value+"<span>%</span>"; };
+
+  [].forEach.call(view.querySelectorAll("[data-toggle]"),function(el){
+    el.onclick=function(){ var id=el.getAttribute("data-toggle");
+      draft.done[id]=!draft.done[id]; render(); };
+  });
+  [].forEach.call(view.querySelectorAll("[data-note]"),function(el){
+    el.oninput=function(){ draft.notes[el.getAttribute("data-note")]=el.value; };
+  });
+  [].forEach.call(view.querySelectorAll("[data-focus]"),function(el){
+    el.onclick=function(){ toggleFocus(el.getAttribute("data-focus")); };
+  });
+  [].forEach.call(view.querySelectorAll("[data-unfocus]"),function(el){
+    el.onclick=function(){ toggleFocus(el.getAttribute("data-unfocus")); };
+  });
+  document.getElementById("addF").onclick=addFocus;
+  document.getElementById("nf").onkeydown=function(e){ if(e.key==="Enter") addFocus(); };
+}
+
+function toggleFocus(t){
+  var i=draft.focus.indexOf(t);
+  if(i>=0) draft.focus.splice(i,1); else draft.focus.push(t);
+  render();
+}
+function addFocus(){
+  var el=document.getElementById("nf"); var t=el.value.trim();
+  if(!t) return;
+  if(!presets.some(function(p){ return p.text===t; })){
+    presets.unshift({id:uid(),text:t,pinned:false}); persist();
+  }
+  if(draft.focus.indexOf(t)<0) draft.focus.push(t);
+  el.value=""; render();
+}
+
+saveBtn.onclick=function(){
+  var items=exercises.map(function(e){
+    return {exId:e.id,name:e.name,done:!!draft.done[e.id],note:(draft.notes[e.id]||"").trim()};
+  });
+  var session={id:uid(),date:draft.date,time:draft.time,items:items,
+    focus:draft.focus.slice(),comment:draft.comment.trim(),feel:draft.feel};
+  sessions.unshift(session);
+  persist(); cloudSaveSession(session);
+  draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",feel:50};
+  render(); toast("記録を保存しました");
+};
+
+/* ---------- review ---------- */
+function reviewHTML(){
+  var h='<div class="sub">';
+  [["history","履歴"],["stats","統計"],["effect","分析"],["comments","コメント"]].forEach(function(x){
+    h+='<button class="subbtn'+(sub===x[0]?" on":"")+'" data-sub="'+x[0]+'">'+x[1]+'</button>';
+  });
+  h+='</div>';
+
+  if(sub==="history"){
+    if(!sessions.length) return h+'<div class="blank">まだ記録がない。<br>「記録」で最初の一回を残そう。</div>';
+    sessions.forEach(function(s){
+      var dc=s.items.filter(function(i){ return i.done; }).length;
+      var open=expanded===s.id;
+      h+='<div class="card"><div class="ctop" data-exp="'+s.id+'"><div class="cmeta">'
+       + '<span class="date">'+fmt(s.date)+' · '+s.time
+       + (typeof s.feel==="number"?' <span class="badge">手応え '+s.feel+'%</span>':'')+'</span>'
+       + '<span class="count">メニュー '+dc+'/'+s.items.length+' '+(open?"▲":"▼")+'</span></div>';
+      s.focus.forEach(function(f){ h+='<div class="cfocus">'+esc(f)+'</div>'; });
+      h+='</div>';
+      if(open){
+        h+='<div class="cbody">';
+        s.items.forEach(function(i){
+          h+='<div class="item'+(i.done?" d":"")+'"><span class="tick'+(i.done?" d":"")+'">✓</span>'+esc(i.name)+'</div>';
+          if(i.note) h+='<div class="inote">↳ '+esc(i.note)+'</div>';
+        });
+        if(s.comment) h+='<div class="cmt">'+esc(s.comment)+'</div>';
+        h+='</div>';
+      }
+      h+='</div>';
+    });
+    return h;
+  }
+
+  if(sub==="stats"){
+    if(!sessions.length) return h+'<div class="blank">記録が貯まると、ここに実施率が出る。</div>';
+    var fs=sessions.filter(function(s){ return typeof s.feel==="number"; });
+    h+='<div class="statwrap"><div class="cue" style="margin-bottom:6px">総トレーニング数</div>'
+     + '<div class="big">'+sessions.length+'<span> sessions</span></div>';
+    if(fs.length){
+      var avg=Math.round(fs.reduce(function(a,s){ return a+s.feel; },0)/fs.length);
+      h+='<div style="margin-top:16px"><div class="cue" style="margin-bottom:6px">平均手応え</div>'
+       + '<div class="big">'+avg+'<span>%</span></div></div>';
+    }
+    h+='<div class="cue" style="margin:22px 0 4px">メニュー実施率</div>';
+    exercises.forEach(function(e){
+      var c=sessions.filter(function(s){
+        return s.items.some(function(i){ return i.exId===e.id && i.done; }); }).length;
+      var p=Math.round(c/sessions.length*100);
+      h+='<div class="bar"><div class="barlbl"><span>'+esc(e.name)+'</span><b>'+p+'%</b></div>'
+       + '<div class="track"><div class="fill" style="width:'+p+'%"></div></div></div>';
+    });
+    return h+'</div>';
+  }
+
+  if(sub==="effect"){
+    var f2=sessions.filter(function(s){ return typeof s.feel==="number"; });
+    if(f2.length<2) return h+'<div class="blank">手応え付きの記録が貯まると、<br>意識したことの「効き」が見えてくる。</div>';
+    var texts=[]; f2.forEach(function(s){ s.focus.forEach(function(t){ if(texts.indexOf(t)<0) texts.push(t); }); });
+    if(!texts.length) return h+'<div class="blank">意識したことを選んで記録すると、<br>ここに効きが並ぶ。</div>';
+    function mean(a){ return a.length? a.reduce(function(x,s){ return x+s.feel; },0)/a.length : null; }
+    var rows=texts.map(function(t){
+      var w=f2.filter(function(s){ return s.focus.indexOf(t)>=0; });
+      var o=f2.filter(function(s){ return s.focus.indexOf(t)<0; });
+      var wm=mean(w), om=mean(o);
+      return {t:t,n:w.length,wm:wm,diff:(wm!=null&&om!=null)?wm-om:null};
+    }).sort(function(a,b){ return (b.diff==null?-999:b.diff)-(a.diff==null?-999:a.diff); });
+    if(f2.length<5) h+='<div class="small">※ データが少ない（n='+f2.length+'）。傾向は参考程度に。</div>';
+    rows.forEach(function(r){
+      var d=r.diff==null?null:Math.round(r.diff);
+      h+='<div class="eff"><div class="efftop"><div class="efftext">'+esc(r.t)+'</div>'
+       + '<div class="effdiff'+(d!=null&&d>=0?" pos":"")+'">'+(d==null?"—":(d>=0?"+":"")+d)+'</div></div>'
+       + '<div class="effmeta">意識した日の平均 '+(r.wm!=null?Math.round(r.wm):"—")+'% · n='+r.n
+       + (d!=null?'　/　意識しない日との差 '+(d>=0?"+":"")+d+'pt':'')+'</div></div>';
+    });
+    return h;
+  }
+
+  var wc=sessions.filter(function(s){ return s.comment; });
+  if(!wc.length) return h+'<div class="blank">振り返りのコメントがまだない。</div>';
+  wc.forEach(function(s){
+    h+='<div class="cmtcard"><div class="cmtdate">'+fmt(s.date)+' · '+s.time+'</div>'
+     + '<div class="cmttext">'+esc(s.comment)+'</div></div>';
+  });
+  return h;
+}
+
+function bindReview(){
+  [].forEach.call(view.querySelectorAll("[data-sub]"),function(el){
+    el.onclick=function(){ sub=el.getAttribute("data-sub"); render(); };
+  });
+  [].forEach.call(view.querySelectorAll("[data-exp]"),function(el){
+    el.onclick=function(){ var id=el.getAttribute("data-exp");
+      expanded = expanded===id ? null : id; render(); };
+  });
+}
+
+/* ---------- settings ---------- */
+var modal=document.getElementById("modal");
+document.getElementById("gear").onclick=openSheet;
+
+function openSheet(){
+  var h='<div class="scrim" id="scrim"><div class="sheet" id="sheet">'
+   + '<div class="sheethead"><div class="sheettitle">項目を編集</div>'
+   + '<button class="ico" id="close">✕</button></div>';
+
+  h+='<div class="cue">エクササイズ項目</div><div class="mlist">';
+  exercises.forEach(function(e,i){
+    h+='<div class="mrow"><span class="mname">'+esc(e.name)+'</span>'
+     + '<button class="mi" data-up="'+i+'">▲</button>'
+     + '<button class="mi" data-down="'+i+'">▼</button>'
+     + '<button class="mi" data-delex="'+e.id+'">🗑</button></div>';
+  });
+  h+='</div><div class="addrow"><input type="text" id="ne" placeholder="エクササイズを追加…">'
+   + '<button class="add" id="addE">＋ 追加</button></div>';
+
+  h+='<div class="cue" style="margin-top:24px">意識することの定型</div><div class="mlist">';
+  presets.slice().sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0); }).forEach(function(p){
+    h+='<div class="mrow"><span class="mname s">'+esc(p.text)+'</span>'
+     + '<button class="mi'+(p.pinned?" on":"")+'" data-pin="'+p.id+'">★</button>'
+     + '<button class="mi" data-delp="'+p.id+'">🗑</button></div>';
+  });
+  h+='</div><div class="addrow"><input type="text" id="np" placeholder="定型を追加…">'
+   + '<button class="add" id="addP">＋ 追加</button></div>';
+
+  h+='<div class="cue" style="margin-top:24px">データ</div>'
+   + '<button class="ghost" id="demo">サンプルデータを入れる（お試し用）</button>'
+   + '<button class="ghost" id="wipe">記録をすべて消去</button>'
+   + '</div></div>';
+  modal.innerHTML=h;
+
+  document.getElementById("scrim").onclick=function(e){ if(e.target.id==="scrim") close(); };
+  document.getElementById("close").onclick=close;
+
+  [].forEach.call(modal.querySelectorAll("[data-up]"),function(el){
+    el.onclick=function(){ var i=+el.getAttribute("data-up"); if(i>0){
+      var a=exercises[i-1]; exercises[i-1]=exercises[i]; exercises[i]=a; persist(); openSheet(); } };
+  });
+  [].forEach.call(modal.querySelectorAll("[data-down]"),function(el){
+    el.onclick=function(){ var i=+el.getAttribute("data-down"); if(i<exercises.length-1){
+      var a=exercises[i+1]; exercises[i+1]=exercises[i]; exercises[i]=a; persist(); openSheet(); } };
+  });
+  [].forEach.call(modal.querySelectorAll("[data-delex]"),function(el){
+    el.onclick=function(){ var id=el.getAttribute("data-delex");
+      exercises=exercises.filter(function(x){ return x.id!==id; }); persist(); openSheet(); };
+  });
+  [].forEach.call(modal.querySelectorAll("[data-pin]"),function(el){
+    el.onclick=function(){ var id=el.getAttribute("data-pin");
+      presets=presets.map(function(p){ return p.id===id?{id:p.id,text:p.text,pinned:!p.pinned}:p; });
+      persist(); openSheet(); };
+  });
+  [].forEach.call(modal.querySelectorAll("[data-delp]"),function(el){
+    el.onclick=function(){ var id=el.getAttribute("data-delp");
+      presets=presets.filter(function(x){ return x.id!==id; }); persist(); openSheet(); };
+  });
+  document.getElementById("addE").onclick=function(){
+    var v=document.getElementById("ne").value.trim(); if(!v) return;
+    exercises.push({id:uid(),name:v}); persist(); openSheet();
+  };
+  document.getElementById("addP").onclick=function(){
+    var v=document.getElementById("np").value.trim(); if(!v) return;
+    presets.unshift({id:uid(),text:v,pinned:false}); persist(); openSheet();
+  };
+  document.getElementById("demo").onclick=function(){
+    if(confirm("サンプルの過去データを入れる？（今の記録に追加されます）")){
+      var s=sample(); sessions=s.concat(sessions); persist(); cloudAddSessions(s);
+      close(); tab="review"; sub="history"; setTab(); render(); toast("サンプルを追加しました");
+    }
+  };
+  document.getElementById("wipe").onclick=function(){
+    if(confirm("記録をすべて消去する？元には戻せない。")){
+      sessions=[]; persist(); cloudDeleteAllSessions();
+      close(); render(); toast("記録を消去しました");
+    }
+  };
+}
+function close(){ modal.innerHTML=""; }
+
+/* ---------- tabs ---------- */
+function setTab(){
+  [].forEach.call(document.querySelectorAll(".tab"),function(b){
+    b.className="tab"+(b.getAttribute("data-tab")===tab?" on":"");
+  });
+}
+[].forEach.call(document.querySelectorAll(".tab"),function(b){
+  b.onclick=function(){ tab=b.getAttribute("data-tab"); setTab(); render(); };
+});
+
+render();
+})();
+</script>
+</body>
+</html>
