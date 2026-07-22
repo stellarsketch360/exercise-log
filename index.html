@@ -220,7 +220,7 @@ var exercises=load("act:exercises",DEF_EX);
 var presets=load("act:presets",DEF_PRE);
 var sessions=load("act:sessions",[]);
 var tab="record", sub="history", expanded=null;
-var draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",feel:50};
+var draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",body:"",mind:"",thought:"",feel:50};
 
 function persist(){
   save("act:exercises",exercises); save("act:presets",presets); save("act:sessions",sessions);
@@ -292,24 +292,38 @@ function sample(){
   var base=new Date();
   function day(b){ var d=new Date(base); d.setDate(d.getDate()-b);
     return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
-  function mk(b,t,f,fo,fe,c){
+  function mk(b,t,f,fo,fe,c,bd,md,th){
     return {id:uid(),date:day(b),time:t,feel:fe,focus:fo,comment:c||"",
+      body:bd||"",mind:md||"",thought:th||"",
       items:DEF_EX.map(function(e,i){ return {exId:e.id,name:e.name,done:!!f[i],note:""}; })};
   }
   return [
-    mk(0,"07:40",[1,1,1,1,0],["相手の言葉を本当に聞く","呼吸を止めない"],82,"オープンナップで肩が緩んでから声が通った。"),
-    mk(1,"08:10",[1,1,0,1,1],["身体から始める"],68,""),
-    mk(2,"07:55",[1,1,1,0,1],["結果を急がない","呼吸を止めない"],75,"クオリティに入る前に焦った。途中で気づいて戻せた。"),
-    mk(4,"22:30",[1,0,1,1,0],["判断せずに、ただ在る"],58,"夜にやると集中が散る。"),
-    mk(5,"07:30",[1,1,1,1,1],["相手の言葉を本当に聞く","結果を急がない"],88,"全部通せた日。センターが安定していた。"),
-    mk(7,"08:00",[1,1,0,0,0],[],52,"時間がなくて駆け足。"),
-    mk(8,"07:45",[1,1,1,1,0],["呼吸を止めない","身体から始める"],79,""),
-    mk(10,"09:00",[0,1,1,1,1],["相手の言葉を本当に聞く"],84,"ワイドムーブメントで視野が開いた。"),
-    mk(11,"07:50",[1,1,1,0,0],["結果を急がない"],63,""),
-    mk(13,"08:20",[1,0,1,1,1],["判断せずに、ただ在る","呼吸を止めない"],71,"ジャッジが減ると楽になる。"),
-    mk(16,"07:35",[1,1,1,1,1],["相手の言葉を本当に聞く","身体から始める"],90,"久々に良い手応え。"),
-    mk(19,"08:05",[1,1,0,1,0],[],55,"なんとなくで終わった。意識を決めていなかった。"),
-    mk(22,"07:40",[1,1,1,0,1],["結果を急がない","相手の言葉を本当に聞く"],77,"")
+    mk(0,"07:40",[1,1,1,1,0],["相手の言葉を本当に聞く","呼吸を止めない"],82,"オープンナップで肩が緩んでから声が通った。",
+      "肩と首の張りが強かったが、動くうちに緩んだ。","声を聞いてもらえている感覚があり、落ち着いていた。","言葉を選ぶ前に相手の状態を見る余裕があった。"),
+    mk(1,"08:10",[1,1,0,1,1],["身体から始める"],68,"",
+      "寝不足で体が重かった。","焦りが少しあった。","手順を追うことに意識が向きすぎていた。"),
+    mk(2,"07:55",[1,1,1,0,1],["結果を急がない","呼吸を止めない"],75,"クオリティに入る前に焦った。途中で気づいて戻せた。",
+      "体は軽かった。","クオリティの前で急ぐ気持ちが出た。","焦りに気づいた瞬間、切り替えられた。"),
+    mk(4,"22:30",[1,0,1,1,0],["判断せずに、ただ在る"],58,"夜にやると集中が散る。",
+      "夜だったせいか体が重だるい。","判断が先に立ってしまった。","考えがまとまらず、途中で集中が切れた。"),
+    mk(5,"07:30",[1,1,1,1,1],["相手の言葉を本当に聞く","結果を急がない"],88,"全部通せた日。センターが安定していた。",
+      "体の可動域が広く感じた。","落ち着いて話を聞けた。","急がず、ただ流れに乗る感覚があった。"),
+    mk(7,"08:00",[1,1,0,0,0],[],52,"時間がなくて駆け足。",
+      "時間がなく体を温める前に始めた。","焦りが最後まで残った。","考える前に動いてしまっていた。"),
+    mk(8,"07:45",[1,1,1,1,0],["呼吸を止めない","身体から始める"],79,"",
+      "呼吸が浅くなる場面があった。","安定していた。","身体の感覚に意識を戻せた。"),
+    mk(10,"09:00",[0,1,1,1,1],["相手の言葉を本当に聞く"],84,"ワイドムーブメントで視野が開いた。",
+      "肩まわりが緩み、視野が広がった感覚。","相手の言葉がよく入ってきた。","判断を急がず待てた。"),
+    mk(11,"07:50",[1,1,1,0,0],["結果を急がない"],63,"",
+      "体の反応が鈍かった。","結果を気にしてしまった。","急いで結論を出そうとしていた。"),
+    mk(13,"08:20",[1,0,1,1,1],["判断せずに、ただ在る","呼吸を止めない"],71,"ジャッジが減ると楽になる。",
+      "呼吸が深く保てた。","ジャッジする気持ちが減った。","評価せずただ在ることを意識できた。"),
+    mk(16,"07:35",[1,1,1,1,1],["相手の言葉を本当に聞く","身体から始める"],90,"久々に良い手応え。",
+      "体の軸が安定していた。","相手の言葉がまっすぐ届いた。","迷いなく動けた。"),
+    mk(19,"08:05",[1,1,0,1,0],[],55,"なんとなくで終わった。意識を決めていなかった。",
+      "体は動いたが意識が伴わなかった。","なんとなくで終わった感覚。","今日意識することを決めていなかった。"),
+    mk(22,"07:40",[1,1,1,0,1],["結果を急がない","相手の言葉を本当に聞く"],77,"",
+      "体の力みが少なかった。","急がず話を聞けた。","結果より過程に意識が向いていた。")
   ];
 }
 
@@ -320,7 +334,8 @@ var saveBtn=document.getElementById("saveBtn");
 
 function hasContent(){
   var any=false; for(var k in draft.done){ if(draft.done[k]) any=true; }
-  return any || draft.focus.length>0 || draft.comment.trim()!=="";
+  return any || draft.focus.length>0 || draft.comment.trim()!==""
+    || draft.body.trim()!=="" || draft.mind.trim()!=="" || draft.thought.trim()!=="";
 }
 
 function render(){
@@ -369,6 +384,13 @@ function recordHTML(){
   });
   h+='</div></div>';
 
+  h+='<div class="sec"><div class="cue lbl">体の調子</div>'
+   + '<textarea id="bd" placeholder="今日の体の感覚…">'+esc(draft.body)+'</textarea></div>';
+  h+='<div class="sec"><div class="cue lbl">心の調子</div>'
+   + '<textarea id="md" placeholder="今日の心の状態…">'+esc(draft.mind)+'</textarea></div>';
+  h+='<div class="sec"><div class="cue lbl">思考の調子</div>'
+   + '<textarea id="th" placeholder="今日の思考の状態…">'+esc(draft.thought)+'</textarea></div>';
+
   h+='<div class="sec"><div class="cue lbl">コメント</div>'
    + '<textarea id="cm" placeholder="今日の訓練を振り返って…">'+esc(draft.comment)+'</textarea></div>';
 
@@ -382,6 +404,9 @@ function bindRecord(){
   document.getElementById("d").onchange=function(){ draft.date=this.value; };
   document.getElementById("t").onchange=function(){ draft.time=this.value; };
   document.getElementById("cm").oninput=function(){ draft.comment=this.value; saveBtn.disabled=!hasContent(); };
+  document.getElementById("bd").oninput=function(){ draft.body=this.value; saveBtn.disabled=!hasContent(); };
+  document.getElementById("md").oninput=function(){ draft.mind=this.value; saveBtn.disabled=!hasContent(); };
+  document.getElementById("th").oninput=function(){ draft.thought=this.value; saveBtn.disabled=!hasContent(); };
   var fe=document.getElementById("fe");
   fe.oninput=function(){ draft.feel=+this.value; document.getElementById("fv").innerHTML=this.value+"<span>%</span>"; };
 
@@ -422,10 +447,11 @@ saveBtn.onclick=function(){
     return {exId:e.id,name:e.name,done:!!draft.done[e.id],note:(draft.notes[e.id]||"").trim()};
   });
   var session={id:uid(),date:draft.date,time:draft.time,items:items,
-    focus:draft.focus.slice(),comment:draft.comment.trim(),feel:draft.feel};
+    focus:draft.focus.slice(),comment:draft.comment.trim(),
+    body:draft.body.trim(),mind:draft.mind.trim(),thought:draft.thought.trim(),feel:draft.feel};
   sessions.unshift(session);
   persist(); cloudSaveSession(session);
-  draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",feel:50};
+  draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",body:"",mind:"",thought:"",feel:50};
   render(); toast("記録を保存しました");
 };
 
@@ -453,6 +479,9 @@ function reviewHTML(){
         s.items.forEach(function(i){
           h+='<div class="item'+(i.done?" d":"")+'"><span class="tick'+(i.done?" d":"")+'">✓</span>'+esc(i.name)+'</div>';
           if(i.note) h+='<div class="inote">↳ '+esc(i.note)+'</div>';
+        });
+        [["body","体"],["mind","心"],["thought","思考"]].forEach(function(f){
+          if(s[f[0]]) h+='<div class="cmt"><span class="badge">'+f[1]+'</span> '+esc(s[f[0]])+'</div>';
         });
         if(s.comment) h+='<div class="cmt">'+esc(s.comment)+'</div>';
         h+='</div>';
