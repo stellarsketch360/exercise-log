@@ -228,8 +228,9 @@ var DEF_PRE=[
   {id:"p3",text:"いつもと違う動きをする",pinned:false}
 ];
 var DEF_TIMERS=[
-  {id:"tm1",name:"椅子エクササイズ",min:10},
-  {id:"tm2",name:"個人エクササイズ",min:5}
+  {id:"tm0",name:"15秒のテスト",sec:15},
+  {id:"tm1",name:"椅子エクササイズ",sec:600},
+  {id:"tm2",name:"個人エクササイズ",sec:300}
 ];
 
 /* ---------- state ---------- */
@@ -275,6 +276,11 @@ function cloudAddSessions(list){
 
 function uid(){ return Math.random().toString(36).slice(2,9); }
 function pad(n){ return (n<10?"0":"")+n; }
+function fmtDur(sec){
+  if(sec<60) return sec+"秒";
+  var m=Math.floor(sec/60), s=sec%60;
+  return s ? m+"分"+s+"秒" : m+"分";
+}
 function today(){ var d=new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
 function now(){ var d=new Date(); return pad(d.getHours())+":"+pad(d.getMinutes()); }
 function fmt(s){ var p=s.split("-"); return p[0]+"."+p[1]+"."+p[2]; }
@@ -661,7 +667,7 @@ function timerHTML(){
     var h='<div class="tseg">'+esc(cur.name)+'</div>'
      + '<div class="tcount">'+mm+':'+ss+'</div>'
      + '<div class="tbar"><div class="tbarfill" style="width:'+pct+'%"></div></div>'
-     + '<div class="tnext">'+(nx?'次 → '+esc(nx.name)+'（'+Math.round(nx.total/60)+'分）'
+     + '<div class="tnext">'+(nx?'次 → '+esc(nx.name)+'（'+fmtDur(nx.total)+'）'
        :(timerIndex+1)+' / '+timerRunQueue.length+'　最後のタイマー')+'</div>'
      + '<div class="trow"><button class="tbtn main" id="tpause">'+(timerPaused?"再開":"一時停止")+'</button>'
      + '<button class="tbtn sub" id="tskip">スキップ</button>'
@@ -674,12 +680,12 @@ function timerHTML(){
     var on=timerSel[t.id]!==false;
     h+='<div class="exrow'+(on?" done":"")+'"><div class="exhead" data-tsel="'+t.id+'">'
      + '<div class="box'+(on?" on":"")+'">✓</div><div class="exname">'+esc(t.name)+'</div>'
-     + '<span class="badge">'+t.min+'分</span></div></div>';
+     + '<span class="badge">'+fmtDur(t.sec)+'</span></div></div>';
   });
   h+='</div>';
   var total=timers.filter(function(t){ return timerSel[t.id]!==false; })
-    .reduce(function(a,t){ return a+t.min; },0);
-  h+='<div class="tsum">合計 '+total+'分</div>';
+    .reduce(function(a,t){ return a+t.sec; },0);
+  h+='<div class="tsum">合計 '+fmtDur(total)+'</div>';
   h+='<button class="save" id="tstart"'+(total===0?" disabled":"")+'>スタート</button>';
   return h;
 }
@@ -706,7 +712,7 @@ function bindTimer(){
 function startTimer(){
   var list=timers.filter(function(t){ return timerSel[t.id]!==false; });
   if(!list.length) return;
-  timerRunQueue=list.map(function(t){ return {name:t.name,total:t.min*60}; });
+  timerRunQueue=list.map(function(t){ return {name:t.name,total:t.sec}; });
   ensureAudio();
   timerPrecounting=true; preCount=5;
   playTick();
@@ -804,7 +810,7 @@ function openSheet(){
   h+='<div class="cue" style="margin-top:24px">タイマー項目</div><div class="mlist">';
   timers.forEach(function(t,i){
     h+='<div class="mrow"><span class="mname">'+esc(t.name)+'</span>'
-     + '<span class="badge" style="margin-right:4px">'+t.min+'分</span>'
+     + '<span class="badge" style="margin-right:4px">'+fmtDur(t.sec)+'</span>'
      + '<button class="mi" data-tup="'+i+'">▲</button>'
      + '<button class="mi" data-tdown="'+i+'">▼</button>'
      + '<button class="mi" data-deltm="'+t.id+'">🗑</button></div>';
@@ -876,7 +882,7 @@ function openSheet(){
     var v=document.getElementById("ntn").value.trim();
     var m=+document.getElementById("ntm").value;
     if(!v || !m || m<=0) return;
-    timers.push({id:uid(),name:v,min:m}); persist(); openSheet();
+    timers.push({id:uid(),name:v,sec:Math.round(m*60)}); persist(); openSheet();
   };
   [].forEach.call(modal.querySelectorAll("[data-prevalarm]"),function(el){
     el.onclick=function(){ ensureAudio(); playBeep(el.getAttribute("data-prevalarm")); };
