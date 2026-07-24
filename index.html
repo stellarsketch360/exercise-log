@@ -138,6 +138,7 @@
     border-radius:9px;padding:8px 10px;}
   .mname{flex:1;font-size:13.5px;}
   .mname.s{font-family:var(--serif);font-size:14px;}
+  .mname.cur{color:var(--red);}
   .mi{background:none;border:none;color:var(--dim);cursor:pointer;padding:4px 6px;font-size:14px;line-height:1;}
   .mi:hover{color:var(--red);}
   .mi.on{color:var(--red);}
@@ -238,7 +239,21 @@ var sessions=load("act:sessions",[]);
 var timers=load("act:timers",DEF_TIMERS);
 var tab="record", sub="history", expanded=null;
 var timerSel={}, timerRunning=false, timerPaused=false, timerIndex=-1,
-    timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null;
+    timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null,
+    timerPrecounting=false, preCount=0, preCountHandle=null;
+var ALARM_TYPES=[
+  {id:"classic",name:"クラシック"},
+  {id:"digital",name:"デジタル"},
+  {id:"bell",name:"ベル"},
+  {id:"chimeup",name:"アップチャイム"},
+  {id:"chimedown",name:"ダウンチャイム"},
+  {id:"soft",name:"ソフトポップ"},
+  {id:"siren",name:"警告"},
+  {id:"game",name:"ゲーム風"},
+  {id:"gong",name:"銅鑼"},
+  {id:"heartbeat",name:"ハートビート"}
+];
+var alarmType=load("act:alarm","classic");
 var draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",body:"",mind:"",thought:"",feel:50};
 
 function persist(){
@@ -582,21 +597,62 @@ function ensureAudio(){
     try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
   } else if(audioCtx.state==="suspended"){ audioCtx.resume(); }
 }
-function playBeep(){
+function tone(t0,off,freq,dur,wave,vol){
+  var o=audioCtx.createOscillator(), g=audioCtx.createGain();
+  o.type=wave||"sine"; o.frequency.value=freq;
+  g.gain.setValueAtTime(0.0001,t0+off);
+  g.gain.exponentialRampToValueAtTime(vol||0.35,t0+off+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+off+dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t0+off); o.stop(t0+off+dur+0.05);
+}
+function sweep(t0,off,f1,f2,dur,vol){
+  var o=audioCtx.createOscillator(), g=audioCtx.createGain();
+  o.type="sawtooth";
+  o.frequency.setValueAtTime(f1,t0+off);
+  o.frequency.linearRampToValueAtTime(f2,t0+off+dur);
+  g.gain.setValueAtTime(0.0001,t0+off);
+  g.gain.exponentialRampToValueAtTime(vol||0.3,t0+off+0.05);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+off+dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t0+off); o.stop(t0+off+dur+0.05);
+}
+function playBeep(type){
   if(!audioCtx) return;
-  var t0=audioCtx.currentTime;
-  [0,0.22,0.44].forEach(function(off){
-    var o=audioCtx.createOscillator(), g=audioCtx.createGain();
-    o.type="sine"; o.frequency.value=880;
-    g.gain.setValueAtTime(0.0001,t0+off);
-    g.gain.exponentialRampToValueAtTime(0.35,t0+off+0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001,t0+off+0.18);
-    o.connect(g); g.connect(audioCtx.destination);
-    o.start(t0+off); o.stop(t0+off+0.2);
-  });
+  var a=type||alarmType, t0=audioCtx.currentTime;
+  if(a==="digital"){
+    tone(t0,0,1200,0.1,"square",0.25); tone(t0,0.15,1200,0.1,"square",0.25);
+  } else if(a==="bell"){
+    tone(t0,0,659.25,0.9,"triangle",0.3); tone(t0,0,1318.5,0.9,"triangle",0.08);
+  } else if(a==="chimeup"){
+    tone(t0,0,523.25,0.25,"sine",0.3); tone(t0,0.18,659.25,0.25,"sine",0.3); tone(t0,0.36,783.99,0.4,"sine",0.3);
+  } else if(a==="chimedown"){
+    tone(t0,0,783.99,0.25,"sine",0.3); tone(t0,0.18,659.25,0.25,"sine",0.3); tone(t0,0.36,523.25,0.4,"sine",0.3);
+  } else if(a==="soft"){
+    tone(t0,0,440,0.6,"sine",0.18);
+  } else if(a==="siren"){
+    sweep(t0,0,400,800,0.35,0.3); sweep(t0,0.42,400,800,0.35,0.3);
+  } else if(a==="game"){
+    tone(t0,0,660,0.08,"square",0.25); tone(t0,0.1,660,0.08,"square",0.25); tone(t0,0.2,880,0.12,"square",0.25);
+  } else if(a==="gong"){
+    tone(t0,0,110,1.4,"triangle",0.4);
+  } else if(a==="heartbeat"){
+    tone(t0,0,100,0.15,"sine",0.4); tone(t0,0.22,100,0.15,"sine",0.4);
+  } else {
+    tone(t0,0,880,0.18,"sine",0.35); tone(t0,0.22,880,0.18,"sine",0.35); tone(t0,0.44,880,0.18,"sine",0.35);
+  }
+}
+function playTick(){
+  if(!audioCtx) return;
+  tone(audioCtx.currentTime,0,600,0.08,"sine",0.2);
 }
 
 function timerHTML(){
+  if(timerPrecounting){
+    return '<div class="tseg">まもなく開始</div>'
+     + '<div class="tcount">'+preCount+'</div>'
+     + '<div class="trow"><button class="tbtn sub" id="tcancel" style="flex:1">キャンセル</button></div>';
+  }
   if(timerRunning){
     var cur=timerRunQueue[timerIndex];
     var mm=pad(Math.floor(timerRemaining/60)), ss=pad(timerRemaining%60);
@@ -629,6 +685,10 @@ function timerHTML(){
 }
 
 function bindTimer(){
+  if(timerPrecounting){
+    document.getElementById("tcancel").onclick=cancelPrecount;
+    return;
+  }
   if(timerRunning){
     document.getElementById("tpause").onclick=toggleTimerPause;
     document.getElementById("tskip").onclick=function(){ advanceSegment(false); };
@@ -647,9 +707,33 @@ function startTimer(){
   var list=timers.filter(function(t){ return timerSel[t.id]!==false; });
   if(!list.length) return;
   timerRunQueue=list.map(function(t){ return {name:t.name,total:t.min*60}; });
+  ensureAudio();
+  timerPrecounting=true; preCount=5;
+  playTick();
+  clearInterval(preCountHandle); preCountHandle=setInterval(precountTick,1000);
+  render();
+}
+function precountTick(){
+  preCount--;
+  if(preCount<0){
+    clearInterval(preCountHandle); preCountHandle=null;
+    timerPrecounting=false;
+    beginRun();
+    return;
+  }
+  playTick();
+  if(tab==="timer") render();
+}
+function cancelPrecount(){
+  clearInterval(preCountHandle); preCountHandle=null;
+  timerPrecounting=false; timerRunQueue=[];
+  render();
+}
+function beginRun(){
   timerIndex=0; timerRemaining=timerRunQueue[0].total; timerPaused=false; timerRunning=true;
   timerEndAt=Date.now()+timerRemaining*1000;
-  ensureAudio();
+  playBeep();
+  if(navigator.vibrate) navigator.vibrate(150);
   clearInterval(timerHandle); timerHandle=setInterval(tick,250);
   render();
 }
@@ -729,6 +813,15 @@ function openSheet(){
    + '<input type="number" id="ntm" placeholder="分" min="1" style="flex:1;max-width:70px">'
    + '<button class="add" id="addTM">＋ 追加</button></div>';
 
+  h+='<div class="cue" style="margin-top:24px">アラーム音</div><div class="mlist">';
+  ALARM_TYPES.forEach(function(a){
+    var on=alarmType===a.id;
+    h+='<div class="mrow"><span class="mname'+(on?" cur":"")+'">'+esc(a.name)+'</span>'
+     + '<button class="mi" data-prevalarm="'+a.id+'">▶</button>'
+     + '<button class="mi'+(on?" on":"")+'" data-selalarm="'+a.id+'">✓</button></div>';
+  });
+  h+='</div>';
+
   h+='<div class="cue" style="margin-top:24px">データ</div>'
    + '<button class="ghost" id="demo">サンプルデータを入れる（お試し用）</button>'
    + '<button class="ghost" id="wipe">記録をすべて消去</button>'
@@ -785,6 +878,13 @@ function openSheet(){
     if(!v || !m || m<=0) return;
     timers.push({id:uid(),name:v,min:m}); persist(); openSheet();
   };
+  [].forEach.call(modal.querySelectorAll("[data-prevalarm]"),function(el){
+    el.onclick=function(){ ensureAudio(); playBeep(el.getAttribute("data-prevalarm")); };
+  });
+  [].forEach.call(modal.querySelectorAll("[data-selalarm]"),function(el){
+    el.onclick=function(){ alarmType=el.getAttribute("data-selalarm"); save("act:alarm",alarmType);
+      ensureAudio(); playBeep(alarmType); openSheet(); };
+  });
   document.getElementById("demo").onclick=function(){
     if(confirm("サンプルの過去データを入れる？（今の記録に追加されます）")){
       var s=sample(); sessions=s.concat(sessions); persist(); cloudAddSessions(s);
