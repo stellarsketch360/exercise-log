@@ -727,7 +727,7 @@ function precountTick(){
     beginRun();
     return;
   }
-  playTick();
+  ensureAudio(); playTick();
   if(tab==="timer") render();
 }
 function cancelPrecount(){
@@ -738,7 +738,7 @@ function cancelPrecount(){
 function beginRun(){
   timerIndex=0; timerRemaining=timerRunQueue[0].total; timerPaused=false; timerRunning=true;
   timerEndAt=Date.now()+timerRemaining*1000;
-  playBeep();
+  ensureAudio(); playBeep();
   if(navigator.vibrate) navigator.vibrate(150);
   clearInterval(timerHandle); timerHandle=setInterval(tick,250);
   render();
@@ -751,7 +751,7 @@ function tick(){
   if(tab==="timer") render();
 }
 function advanceSegment(playSound){
-  if(playSound){ playBeep(); if(navigator.vibrate) navigator.vibrate([250,120,250]); }
+  if(playSound){ ensureAudio(); playBeep(); if(navigator.vibrate) navigator.vibrate([250,120,250]); }
   if(timerIndex<timerRunQueue.length-1){
     timerIndex++; timerRemaining=timerRunQueue[timerIndex].total;
     timerEndAt=Date.now()+timerRemaining*1000; timerPaused=false;
