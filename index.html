@@ -247,7 +247,7 @@ var sessions=load("act:sessions",[]);
 var timers=normTimers(load("act:timers",DEF_TIMERS));
 var tab="record", sub="history", expanded=null;
 var timerSel={}, timerRunning=false, timerPaused=false, timerIndex=-1,
-    timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null,
+    timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null, audioUnlocked=false,
     timerPrecounting=false, preCount=0, preCountHandle=null;
 var ALARM_TYPES=[
   {id:"classic",name:"クラシック"},
@@ -608,7 +608,23 @@ function bindReview(){
 function ensureAudio(){
   if(!audioCtx){
     try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
-  } else if(audioCtx.state==="suspended"){ audioCtx.resume(); }
+    /* iOS 16.4+: play through the ringer/silent switch instead of being muted by it */
+    try{ if(navigator.audioSession) navigator.audioSession.type="playback"; }catch(e){}
+  }
+  if(!audioCtx) return;
+  /* A context is created in "suspended" state on iOS, so this must run on
+     first creation too — not only on later calls. */
+  if(audioCtx.state==="suspended"){ try{ audioCtx.resume(); }catch(e){} }
+  /* iOS only truly unlocks output once a buffer has played inside a gesture. */
+  if(!audioUnlocked){
+    try{
+      var b=audioCtx.createBufferSource();
+      b.buffer=audioCtx.createBuffer(1,1,22050);
+      b.connect(audioCtx.destination);
+      b.start(0);
+      audioUnlocked=true;
+    }catch(e){}
+  }
 }
 function tone(t0,off,freq,dur,wave,vol){
   var o=audioCtx.createOscillator(), g=audioCtx.createGain();
@@ -921,6 +937,23 @@ function setTab(){
 }
 [].forEach.call(document.querySelectorAll(".tab"),function(b){
   b.onclick=function(){ tab=b.getAttribute("data-tab"); setTab(); render(); };
+});
+
+/* iOS unlocks audio only inside a real user gesture, and the alarm itself
+   fires from a timer callback. Unlock on the first touch anywhere so the
+   alarm can sound later. */
+function unlockAudioOnce(){
+  ensureAudio();
+  if(audioCtx && audioCtx.state==="running"){
+    document.removeEventListener("touchend",unlockAudioOnce,true);
+    document.removeEventListener("click",unlockAudioOnce,true);
+  }
+}
+document.addEventListener("touchend",unlockAudioOnce,true);
+document.addEventListener("click",unlockAudioOnce,true);
+/* Safari can suspend the context when the page is backgrounded. */
+document.addEventListener("visibilitychange",function(){
+  if(!document.hidden && audioCtx && audioCtx.state==="suspended") audioCtx.resume();
 });
 
 render();
