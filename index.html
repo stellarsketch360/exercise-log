@@ -233,11 +233,18 @@ var DEF_TIMERS=[
   {id:"tm2",name:"個人エクササイズ",sec:300}
 ];
 
+function normTimers(list){
+  return (list||[]).map(function(t){
+    if(t.sec==null && t.min!=null) return {id:t.id,name:t.name,sec:Math.round(t.min*60)};
+    return t;
+  });
+}
+
 /* ---------- state ---------- */
 var exercises=load("act:exercises",DEF_EX);
 var presets=load("act:presets",DEF_PRE);
 var sessions=load("act:sessions",[]);
-var timers=load("act:timers",DEF_TIMERS);
+var timers=normTimers(load("act:timers",DEF_TIMERS));
 var tab="record", sub="history", expanded=null;
 var timerSel={}, timerRunning=false, timerPaused=false, timerIndex=-1,
     timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null,
@@ -305,7 +312,7 @@ function startSync(u){
     var d=snap.data();
     if(d.exercises) exercises=d.exercises;
     if(d.presets) presets=d.presets;
-    if(d.timers) timers=d.timers;
+    if(d.timers) timers=normTimers(d.timers);
     save("act:exercises",exercises); save("act:presets",presets); save("act:timers",timers);
     render();
   });
