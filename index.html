@@ -30,11 +30,11 @@
   .sec{margin-bottom:26px;}
   .lbl{margin-bottom:10px;}
   .row{display:flex;gap:12px;}
-  input[type=date],input[type=time],input[type=text],textarea{
+  input[type=date],input[type=time],input[type=text],input[type=number],textarea{
     width:100%;background:var(--card);border:1px solid var(--line);color:var(--ink);
     border-radius:10px;padding:11px 12px;font-family:var(--sans);font-size:14px;outline:none;}
   input:focus,textarea:focus{border-color:var(--red);}
-  input[type=date],input[type=time]{font-family:var(--mono);}
+  input[type=date],input[type=time],input[type=number]{font-family:var(--mono);}
   textarea{resize:vertical;min-height:70px;line-height:1.6;}
   .spot{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:16px;
     background-image:radial-gradient(130% 90% at 15% 0%,rgba(158,58,70,.07),transparent 62%);
@@ -151,6 +151,20 @@
     font-size:12px;line-height:1.6;margin-bottom:18px;font-family:var(--mono);}
   .syncdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dim);margin-right:6px;}
   .syncdot.on{background:#3f8a52;}
+  .tsum{font-family:var(--mono);font-size:11px;color:var(--dim);margin:14px 0 4px;text-align:right;}
+  .tseg{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);
+    text-align:center;margin-top:8px;}
+  .tcount{font-family:var(--serif);font-size:60px;color:var(--red);line-height:1;text-align:center;
+    margin:20px 0 4px;font-variant-numeric:tabular-nums;}
+  .tbar{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin:18px 0;}
+  .tbarfill{height:100%;background:var(--red);border-radius:99px;transition:width .2s linear;}
+  .tnext{font-family:var(--mono);font-size:11px;color:var(--dim);text-align:center;}
+  .trow{display:flex;gap:10px;margin-top:20px;}
+  .tbtn{flex:1;border-radius:12px;padding:14px;font-family:var(--mono);font-size:12px;
+    letter-spacing:.1em;text-transform:uppercase;cursor:pointer;border:none;}
+  .tbtn.main{background:var(--red);color:#fff;}
+  .tbtn.sub{background:none;border:1px solid var(--line);color:var(--dim);}
+  .tbtn.sub:hover{border-color:var(--red);color:var(--red);}
 </style>
 </head>
 <body>
@@ -164,6 +178,7 @@
   <div class="tabs">
     <button class="tab on" data-tab="record">記録</button>
     <button class="tab" data-tab="review">まとめ</button>
+    <button class="tab" data-tab="timer">タイマー</button>
   </div>
   <div id="view"></div>
 </div>
@@ -211,17 +226,25 @@ var DEF_PRE=[
   {id:"p2",text:"周りを見る",pinned:false},
   {id:"p3",text:"いつもと違う動きをする",pinned:false}
 ];
+var DEF_TIMERS=[
+  {id:"tm1",name:"椅子エクササイズ",min:10},
+  {id:"tm2",name:"個人エクササイズ",min:5}
+];
 
 /* ---------- state ---------- */
 var exercises=load("act:exercises",DEF_EX);
 var presets=load("act:presets",DEF_PRE);
 var sessions=load("act:sessions",[]);
+var timers=load("act:timers",DEF_TIMERS);
 var tab="record", sub="history", expanded=null;
+var timerSel={}, timerRunning=false, timerPaused=false, timerIndex=-1,
+    timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null;
 var draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",body:"",mind:"",thought:"",feel:50};
 
 function persist(){
   save("act:exercises",exercises); save("act:presets",presets); save("act:sessions",sessions);
-  if(uidRef) db.collection("users").doc(uidRef).set({exercises:exercises,presets:presets},{merge:true});
+  save("act:timers",timers);
+  if(uidRef) db.collection("users").doc(uidRef).set({exercises:exercises,presets:presets,timers:timers},{merge:true});
 }
 function cloudSaveSession(s){ if(uidRef) db.collection("users").doc(uidRef).collection("sessions").doc(s.id).set(s); }
 function cloudDeleteAllSessions(){
@@ -252,7 +275,7 @@ function startSync(u){
   var userDoc=db.collection("users").doc(u);
   userDoc.get().then(function(snap){
     if(!snap.exists){
-      userDoc.set({exercises:exercises,presets:presets});
+      userDoc.set({exercises:exercises,presets:presets,timers:timers});
       if(sessions.length) cloudAddSessions(sessions);
     }
   });
@@ -261,7 +284,8 @@ function startSync(u){
     var d=snap.data();
     if(d.exercises) exercises=d.exercises;
     if(d.presets) presets=d.presets;
-    save("act:exercises",exercises); save("act:presets",presets);
+    if(d.timers) timers=d.timers;
+    save("act:exercises",exercises); save("act:presets",presets); save("act:timers",timers);
     render();
   });
   userDoc.collection("sessions").onSnapshot(function(qs){
@@ -337,10 +361,11 @@ function hasContent(){
 
 function render(){
   savebar.style.display = tab==="record" ? "block" : "none";
-  document.getElementById("gear").style.visibility = tab==="record" ? "visible" : "hidden";
-  view.innerHTML = tab==="record" ? recordHTML() : reviewHTML();
+  document.getElementById("gear").style.visibility = (tab==="record"||tab==="timer") ? "visible" : "hidden";
+  view.innerHTML = tab==="record" ? recordHTML() : tab==="review" ? reviewHTML() : timerHTML();
   if(tab==="record"){ bindRecord(); saveBtn.disabled=!hasContent(); }
-  else bindReview();
+  else if(tab==="review") bindReview();
+  else bindTimer();
 }
 
 function recordHTML(){
@@ -551,6 +576,119 @@ function bindReview(){
   });
 }
 
+/* ---------- timer ---------- */
+function ensureAudio(){
+  if(!audioCtx){
+    try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+  } else if(audioCtx.state==="suspended"){ audioCtx.resume(); }
+}
+function playBeep(){
+  if(!audioCtx) return;
+  var t0=audioCtx.currentTime;
+  [0,0.22,0.44].forEach(function(off){
+    var o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.type="sine"; o.frequency.value=880;
+    g.gain.setValueAtTime(0.0001,t0+off);
+    g.gain.exponentialRampToValueAtTime(0.35,t0+off+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+off+0.18);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0+off); o.stop(t0+off+0.2);
+  });
+}
+
+function timerHTML(){
+  if(timerRunning){
+    var cur=timerRunQueue[timerIndex];
+    var mm=pad(Math.floor(timerRemaining/60)), ss=pad(timerRemaining%60);
+    var nx=timerRunQueue[timerIndex+1];
+    var pct=cur.total>0 ? Math.round((1-timerRemaining/cur.total)*100) : 100;
+    var h='<div class="tseg">'+esc(cur.name)+'</div>'
+     + '<div class="tcount">'+mm+':'+ss+'</div>'
+     + '<div class="tbar"><div class="tbarfill" style="width:'+pct+'%"></div></div>'
+     + '<div class="tnext">'+(nx?'次 → '+esc(nx.name)+'（'+Math.round(nx.total/60)+'分）'
+       :(timerIndex+1)+' / '+timerRunQueue.length+'　最後のタイマー')+'</div>'
+     + '<div class="trow"><button class="tbtn main" id="tpause">'+(timerPaused?"再開":"一時停止")+'</button>'
+     + '<button class="tbtn sub" id="tskip">スキップ</button>'
+     + '<button class="tbtn sub" id="tstop">終了</button></div>';
+    return h;
+  }
+  if(!timers.length) return '<div class="blank">タイマー項目がまだない。<br>⚙ から追加しよう。</div>';
+  var h='<div class="cue lbl" style="margin-bottom:10px">今日のタイマー</div><div class="ex">';
+  timers.forEach(function(t){
+    var on=timerSel[t.id]!==false;
+    h+='<div class="exrow'+(on?" done":"")+'"><div class="exhead" data-tsel="'+t.id+'">'
+     + '<div class="box'+(on?" on":"")+'">✓</div><div class="exname">'+esc(t.name)+'</div>'
+     + '<span class="badge">'+t.min+'分</span></div></div>';
+  });
+  h+='</div>';
+  var total=timers.filter(function(t){ return timerSel[t.id]!==false; })
+    .reduce(function(a,t){ return a+t.min; },0);
+  h+='<div class="tsum">合計 '+total+'分</div>';
+  h+='<button class="save" id="tstart"'+(total===0?" disabled":"")+'>スタート</button>';
+  return h;
+}
+
+function bindTimer(){
+  if(timerRunning){
+    document.getElementById("tpause").onclick=toggleTimerPause;
+    document.getElementById("tskip").onclick=function(){ advanceSegment(false); };
+    document.getElementById("tstop").onclick=stopTimer;
+    return;
+  }
+  [].forEach.call(view.querySelectorAll("[data-tsel]"),function(el){
+    el.onclick=function(){ var id=el.getAttribute("data-tsel");
+      timerSel[id]=!(timerSel[id]!==false); render(); };
+  });
+  var startBtn=document.getElementById("tstart");
+  if(startBtn) startBtn.onclick=startTimer;
+}
+
+function startTimer(){
+  var list=timers.filter(function(t){ return timerSel[t.id]!==false; });
+  if(!list.length) return;
+  timerRunQueue=list.map(function(t){ return {name:t.name,total:t.min*60}; });
+  timerIndex=0; timerRemaining=timerRunQueue[0].total; timerPaused=false; timerRunning=true;
+  timerEndAt=Date.now()+timerRemaining*1000;
+  ensureAudio();
+  clearInterval(timerHandle); timerHandle=setInterval(tick,250);
+  render();
+}
+function tick(){
+  if(!timerRunning || timerPaused) return;
+  var rem=Math.max(0,Math.round((timerEndAt-Date.now())/1000));
+  if(rem<=0){ advanceSegment(true); return; }
+  timerRemaining=rem;
+  if(tab==="timer") render();
+}
+function advanceSegment(playSound){
+  if(playSound){ playBeep(); if(navigator.vibrate) navigator.vibrate([250,120,250]); }
+  if(timerIndex<timerRunQueue.length-1){
+    timerIndex++; timerRemaining=timerRunQueue[timerIndex].total;
+    timerEndAt=Date.now()+timerRemaining*1000; timerPaused=false;
+    clearInterval(timerHandle); timerHandle=setInterval(tick,250);
+  } else {
+    clearInterval(timerHandle); timerHandle=null;
+    timerRunning=false; timerIndex=-1; timerRunQueue=[];
+    toast("タイマー終了");
+  }
+  if(tab==="timer") render();
+}
+function toggleTimerPause(){
+  if(!timerPaused){
+    timerPaused=true; clearInterval(timerHandle);
+    timerRemaining=Math.max(0,Math.round((timerEndAt-Date.now())/1000));
+  } else {
+    timerPaused=false; timerEndAt=Date.now()+timerRemaining*1000;
+    clearInterval(timerHandle); timerHandle=setInterval(tick,250);
+  }
+  render();
+}
+function stopTimer(){
+  clearInterval(timerHandle); timerHandle=null;
+  timerRunning=false; timerPaused=false; timerIndex=-1; timerRunQueue=[];
+  render();
+}
+
 /* ---------- settings ---------- */
 var modal=document.getElementById("modal");
 document.getElementById("gear").onclick=openSheet;
@@ -578,6 +716,18 @@ function openSheet(){
   });
   h+='</div><div class="addrow"><input type="text" id="np" placeholder="定型を追加…">'
    + '<button class="add" id="addP">＋ 追加</button></div>';
+
+  h+='<div class="cue" style="margin-top:24px">タイマー項目</div><div class="mlist">';
+  timers.forEach(function(t,i){
+    h+='<div class="mrow"><span class="mname">'+esc(t.name)+'</span>'
+     + '<span class="badge" style="margin-right:4px">'+t.min+'分</span>'
+     + '<button class="mi" data-tup="'+i+'">▲</button>'
+     + '<button class="mi" data-tdown="'+i+'">▼</button>'
+     + '<button class="mi" data-deltm="'+t.id+'">🗑</button></div>';
+  });
+  h+='</div><div class="addrow"><input type="text" id="ntn" placeholder="名前…" style="flex:2">'
+   + '<input type="number" id="ntm" placeholder="分" min="1" style="flex:1;max-width:70px">'
+   + '<button class="add" id="addTM">＋ 追加</button></div>';
 
   h+='<div class="cue" style="margin-top:24px">データ</div>'
    + '<button class="ghost" id="demo">サンプルデータを入れる（お試し用）</button>'
@@ -616,6 +766,24 @@ function openSheet(){
   document.getElementById("addP").onclick=function(){
     var v=document.getElementById("np").value.trim(); if(!v) return;
     presets.unshift({id:uid(),text:v,pinned:false}); persist(); openSheet();
+  };
+  [].forEach.call(modal.querySelectorAll("[data-tup]"),function(el){
+    el.onclick=function(){ var i=+el.getAttribute("data-tup"); if(i>0){
+      var a=timers[i-1]; timers[i-1]=timers[i]; timers[i]=a; persist(); openSheet(); } };
+  });
+  [].forEach.call(modal.querySelectorAll("[data-tdown]"),function(el){
+    el.onclick=function(){ var i=+el.getAttribute("data-tdown"); if(i<timers.length-1){
+      var a=timers[i+1]; timers[i+1]=timers[i]; timers[i]=a; persist(); openSheet(); } };
+  });
+  [].forEach.call(modal.querySelectorAll("[data-deltm]"),function(el){
+    el.onclick=function(){ var id=el.getAttribute("data-deltm");
+      timers=timers.filter(function(x){ return x.id!==id; }); persist(); openSheet(); };
+  });
+  document.getElementById("addTM").onclick=function(){
+    var v=document.getElementById("ntn").value.trim();
+    var m=+document.getElementById("ntm").value;
+    if(!v || !m || m<=0) return;
+    timers.push({id:uid(),name:v,min:m}); persist(); openSheet();
   };
   document.getElementById("demo").onclick=function(){
     if(confirm("サンプルの過去データを入れる？（今の記録に追加されます）")){
