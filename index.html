@@ -211,7 +211,10 @@ var db=null, uidRef=null, synced=false;
 /* ---------- storage (localStorage + memory fallback, used as offline cache) ---------- */
 var mem={}, canStore=true;
 try{ localStorage.setItem("__t","1"); localStorage.removeItem("__t"); }catch(e){ canStore=false; }
-function load(k,d){ try{ var v=canStore?localStorage.getItem(k):mem[k]; return v?JSON.parse(v):d; }catch(e){ return d; } }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+/* Falls back to a copy, never the DEF_* array itself — otherwise editing a
+   list on a fresh install would mutate the defaults it was seeded from. */
+function load(k,d){ try{ var v=canStore?localStorage.getItem(k):mem[k]; return v?JSON.parse(v):clone(d); }catch(e){ return clone(d); } }
 function save(k,v){ try{ var s=JSON.stringify(v); if(canStore)localStorage.setItem(k,s); else mem[k]=s; }catch(e){} }
 
 /* ---------- defaults ---------- */
@@ -241,7 +244,7 @@ function normTimers(list){
 var exercises=load("act:exercises",DEF_EX);
 /* The original five defaults are already saved on existing devices, so swap
    them for the new ones — but only if the list was never edited. */
-if(exercises.map(function(e){ return e.id; }).join(",")==="e1,e2,e3,e4,e5") exercises=DEF_EX.slice();
+if(exercises.map(function(e){ return e.id; }).join(",")==="e1,e2,e3,e4,e5") exercises=clone(DEF_EX);
 var presets=load("act:presets",DEF_PRE);
 var sessions=load("act:sessions",[]);
 var timers=normTimers(load("act:timers",DEF_TIMERS));
@@ -331,44 +334,64 @@ if(fbReady){
   firebase.auth().signInAnonymously().catch(function(){ toast("同期に失敗しました"); });
 }
 
-/* ---------- sample data (opt-in) ---------- */
-function sample(){
-  var base=new Date();
-  function day(b){ var d=new Date(base); d.setDate(d.getDate()-b);
-    return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
-  function mk(b,t,f,fo,fe,c,bd,md,th){
-    return {id:uid(),date:day(b),time:t,feel:fe,focus:fo,comment:c||"",
-      body:bd||"",mind:md||"",thought:th||"",
-      items:DEF_EX.map(function(e,i){ return {exId:e.id,name:e.name,done:!!f[i],note:""}; })};
+/* ---------- test data (opt-in) ---------- */
+var TXT_BODY=["肩と首が張っていた。","体が軽かった。","寝不足で重だるい。","可動域が広く感じた。",
+  "腰に少し違和感が残った。","温まるまで時間がかかった。","呼吸が深く入った。","脚に疲れが残っていた。",
+  "体の軸が安定していた。","力みが抜けなかった。"];
+var TXT_MIND=["落ち着いていた。","少し焦りがあった。","気持ちが乗らなかった。","静かな集中があった。",
+  "不安が残ったままだった。","機嫌がよかった。","気が散りやすかった。","途中から楽しくなった。",
+  "結果を気にしてしまった。","穏やかに始められた。"];
+var TXT_THOUGHT=["考えが先に走っていた。","余計な判断をせずにいられた。","手順を追うことに集中しすぎた。",
+  "途中で気づいて切り替えられた。","言葉にする前に体が動いた。","比較する気持ちが出た。",
+  "ただ流れに乗れた。","意識することを決めずに始めていた。","迷いが少なかった。"];
+var TXT_COMMENT=["途中で集中が切れた。","短時間でも整った。","終わったあと呼吸が楽になった。",
+  "時間がなくて駆け足。","今日は無理せず軽めに。","久々に良い手応え。","夜にやると集中が散る。",
+  "後半になって調子が上がった。"];
+var TXT_NOTE=["ゆっくりめ","少し痛みあり","調子よい","短めに","丁寧に"];
+
+/* Builds a plausible history for testing. Uses the current exercise and
+   preset lists rather than fixed names, so it stays valid after edits. */
+function sample(days){
+  function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+  function chance(p){ return Math.random()<p; }
+  var base=new Date(), out=[], n=days||120;
+  for(var b=n;b>=0;b--){
+    if(!chance(0.6)) continue;               /* rest days leave natural gaps */
+    var d=new Date(base); d.setDate(d.getDate()-b);
+    var items=exercises.map(function(e){
+      return {exId:e.id,name:e.name,done:chance(0.78),note:chance(0.22)?pick(TXT_NOTE):""};
+    });
+    if(items.length && !items.some(function(i){ return i.done; })) items[0].done=true;
+    var prog=n?(n-b)/n:1;                    /* drift upward so trends show */
+    var feel=Math.max(35,Math.min(97,Math.round(52+prog*28+(Math.random()*24-12))));
+    var focus=[], pool=presets.map(function(p){ return p.text; });
+    var k=chance(0.25)?0:(chance(0.5)?1:2);
+    while(focus.length<k && pool.length) focus.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
+    var hh=chance(0.2)?21+Math.floor(Math.random()*2):7+Math.floor(Math.random()*3);
+    out.push({id:uid(),
+      date:d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()),
+      time:pad(hh)+":"+pad(Math.floor(Math.random()*12)*5),
+      feel:feel, focus:focus,
+      comment:chance(0.4)?pick(TXT_COMMENT):"",
+      body:chance(0.8)?pick(TXT_BODY):"",
+      mind:chance(0.8)?pick(TXT_MIND):"",
+      thought:chance(0.75)?pick(TXT_THOUGHT):"",
+      items:items});
   }
-  return [
-    mk(0,"07:40",[1,1,1,1,0],["相手の言葉を本当に聞く","呼吸を止めない"],82,"オープンナップで肩が緩んでから声が通った。",
-      "肩と首の張りが強かったが、動くうちに緩んだ。","声を聞いてもらえている感覚があり、落ち着いていた。","言葉を選ぶ前に相手の状態を見る余裕があった。"),
-    mk(1,"08:10",[1,1,0,1,1],["身体から始める"],68,"",
-      "寝不足で体が重かった。","焦りが少しあった。","手順を追うことに意識が向きすぎていた。"),
-    mk(2,"07:55",[1,1,1,0,1],["結果を急がない","呼吸を止めない"],75,"クオリティに入る前に焦った。途中で気づいて戻せた。",
-      "体は軽かった。","クオリティの前で急ぐ気持ちが出た。","焦りに気づいた瞬間、切り替えられた。"),
-    mk(4,"22:30",[1,0,1,1,0],["判断せずに、ただ在る"],58,"夜にやると集中が散る。",
-      "夜だったせいか体が重だるい。","判断が先に立ってしまった。","考えがまとまらず、途中で集中が切れた。"),
-    mk(5,"07:30",[1,1,1,1,1],["相手の言葉を本当に聞く","結果を急がない"],88,"全部通せた日。センターが安定していた。",
-      "体の可動域が広く感じた。","落ち着いて話を聞けた。","急がず、ただ流れに乗る感覚があった。"),
-    mk(7,"08:00",[1,1,0,0,0],[],52,"時間がなくて駆け足。",
-      "時間がなく体を温める前に始めた。","焦りが最後まで残った。","考える前に動いてしまっていた。"),
-    mk(8,"07:45",[1,1,1,1,0],["呼吸を止めない","身体から始める"],79,"",
-      "呼吸が浅くなる場面があった。","安定していた。","身体の感覚に意識を戻せた。"),
-    mk(10,"09:00",[0,1,1,1,1],["相手の言葉を本当に聞く"],84,"ワイドムーブメントで視野が開いた。",
-      "肩まわりが緩み、視野が広がった感覚。","相手の言葉がよく入ってきた。","判断を急がず待てた。"),
-    mk(11,"07:50",[1,1,1,0,0],["結果を急がない"],63,"",
-      "体の反応が鈍かった。","結果を気にしてしまった。","急いで結論を出そうとしていた。"),
-    mk(13,"08:20",[1,0,1,1,1],["判断せずに、ただ在る","呼吸を止めない"],71,"ジャッジが減ると楽になる。",
-      "呼吸が深く保てた。","ジャッジする気持ちが減った。","評価せずただ在ることを意識できた。"),
-    mk(16,"07:35",[1,1,1,1,1],["相手の言葉を本当に聞く","身体から始める"],90,"久々に良い手応え。",
-      "体の軸が安定していた。","相手の言葉がまっすぐ届いた。","迷いなく動けた。"),
-    mk(19,"08:05",[1,1,0,1,0],[],55,"なんとなくで終わった。意識を決めていなかった。",
-      "体は動いたが意識が伴わなかった。","なんとなくで終わった感覚。","今日意識することを決めていなかった。"),
-    mk(22,"07:40",[1,1,1,0,1],["結果を急がない","相手の言葉を本当に聞く"],77,"",
-      "体の力みが少なかった。","急がず話を聞けた。","結果より過程に意識が向いていた。")
-  ];
+  return out.reverse();                      /* newest first, as the app expects */
+}
+
+/* Puts every setting and the whole log back to a first-launch state. */
+function resetAll(){
+  clearInterval(timerHandle); timerHandle=null;
+  clearInterval(preCountHandle); preCountHandle=null;
+  timerRunning=false; timerPaused=false; timerPrecounting=false;
+  timerIndex=-1; timerRunQueue=[];
+  exercises=clone(DEF_EX); presets=clone(DEF_PRE); timers=clone(DEF_TIMERS);
+  alarmType="bell"; save("act:alarm",alarmType);
+  timerSel={}; sessions=[]; expanded=null;
+  draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",body:"",mind:"",thought:"",feel:50};
+  persist(); cloudDeleteAllSessions();
 }
 
 /* ---------- render ---------- */
@@ -831,7 +854,8 @@ function openSheet(){
   h+='</div>';
 
   h+='<div class="cue" style="margin-top:24px">データ</div>'
-   + '<button class="ghost" id="demo">サンプルデータを入れる（お試し用）</button>'
+   + '<button class="ghost" id="demo">使い込んだふうにする（テスト用）</button>'
+   + '<button class="ghost" id="reset">全てデフォルトに戻す（テスト用）</button>'
    + '<button class="ghost" id="wipe">記録をすべて消去</button>'
    + '</div></div>';
   modal.innerHTML=h;
@@ -894,9 +918,19 @@ function openSheet(){
       ensureAudio(); playBeep(alarmType); openSheet(); };
   });
   document.getElementById("demo").onclick=function(){
-    if(confirm("サンプルの過去データを入れる？（今の記録に追加されます）")){
-      var s=sample(); sessions=s.concat(sessions); persist(); cloudAddSessions(s);
-      close(); tab="review"; sub="history"; setTab(); render(); toast("サンプルを追加しました");
+    if(confirm("約4か月ぶんの記録をランダムに作る？（今の記録は消して入れ替えます）")){
+      var s=sample();
+      sessions=s; save("act:sessions",sessions);
+      cloudDeleteAllSessions(); cloudAddSessions(s);
+      close(); tab="review"; sub="history"; setTab(); render();
+      toast(s.length+"件の記録を入れました");
+    }
+  };
+  document.getElementById("reset").onclick=function(){
+    if(confirm("メニュー・定型文・タイマー・アラーム音・記録を全て初期状態に戻す？元には戻せない。")){
+      resetAll();
+      close(); tab="record"; sub="history"; setTab(); render();
+      toast("デフォルトに戻しました");
     }
   };
   document.getElementById("wipe").onclick=function(){
