@@ -250,18 +250,21 @@ var timerSel={}, timerRunning=false, timerPaused=false, timerIndex=-1,
     timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null, audioUnlocked=false,
     timerPrecounting=false, preCount=0, preCountHandle=null;
 var ALARM_TYPES=[
-  {id:"classic",name:"クラシック"},
-  {id:"digital",name:"デジタル"},
-  {id:"bell",name:"ベル"},
-  {id:"chimeup",name:"アップチャイム"},
-  {id:"chimedown",name:"ダウンチャイム"},
-  {id:"soft",name:"ソフトポップ"},
-  {id:"siren",name:"警告"},
-  {id:"game",name:"ゲーム風"},
-  {id:"gong",name:"銅鑼"},
-  {id:"heartbeat",name:"ハートビート"}
+  {id:"bell",name:"ベル（今の音）"},
+  {id:"clear",name:"クリアベル"},
+  {id:"hand",name:"ハンドベル"},
+  {id:"church",name:"教会の鐘"},
+  {id:"tubular",name:"チューブラーベル"},
+  {id:"crystal",name:"クリスタル"},
+  {id:"rin",name:"お鈴（りん）"},
+  {id:"triangle",name:"トライアングル"},
+  {id:"dingdong",name:"ドアベル"},
+  {id:"glock",name:"グロッケン"},
+  {id:"jingle",name:"鈴（すず）"}
 ];
-var alarmType=load("act:alarm","classic");
+var alarmType=load("act:alarm","bell");
+/* Older builds stored alarm ids that no longer exist; fall back to the bell. */
+if(!ALARM_TYPES.some(function(a){ return a.id===alarmType; })) alarmType="bell";
 var draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",body:"",mind:"",thought:"",feel:50};
 
 function persist(){
@@ -635,40 +638,47 @@ function tone(t0,off,freq,dur,wave,vol){
   o.connect(g); g.connect(audioCtx.destination);
   o.start(t0+off); o.stop(t0+off+dur+0.05);
 }
-function sweep(t0,off,f1,f2,dur,vol){
-  var o=audioCtx.createOscillator(), g=audioCtx.createGain();
-  o.type="sawtooth";
-  o.frequency.setValueAtTime(f1,t0+off);
-  o.frequency.linearRampToValueAtTime(f2,t0+off+dur);
-  g.gain.setValueAtTime(0.0001,t0+off);
-  g.gain.exponentialRampToValueAtTime(vol||0.3,t0+off+0.05);
-  g.gain.exponentialRampToValueAtTime(0.0001,t0+off+dur);
-  o.connect(g); g.connect(audioCtx.destination);
-  o.start(t0+off); o.stop(t0+off+dur+0.05);
+/* A bell is a fundamental plus inharmonic partials that fade faster than it.
+   parts entries are [frequency ratio, gain ratio, decay ratio]. */
+function bell(t0,off,f,dur,vol,parts){
+  for(var i=0;i<parts.length;i++){
+    var p=parts[i];
+    tone(t0,off,f*p[0],dur*p[2],"sine",vol*p[1]);
+  }
 }
 function playBeep(type){
   if(!audioCtx) return;
   var a=type||alarmType, t0=audioCtx.currentTime;
-  if(a==="digital"){
-    tone(t0,0,1200,0.1,"square",0.25); tone(t0,0.15,1200,0.1,"square",0.25);
-  } else if(a==="bell"){
-    tone(t0,0,659.25,0.9,"triangle",0.3); tone(t0,0,1318.5,0.9,"triangle",0.08);
-  } else if(a==="chimeup"){
-    tone(t0,0,523.25,0.25,"sine",0.3); tone(t0,0.18,659.25,0.25,"sine",0.3); tone(t0,0.36,783.99,0.4,"sine",0.3);
-  } else if(a==="chimedown"){
-    tone(t0,0,783.99,0.25,"sine",0.3); tone(t0,0.18,659.25,0.25,"sine",0.3); tone(t0,0.36,523.25,0.4,"sine",0.3);
-  } else if(a==="soft"){
-    tone(t0,0,440,0.6,"sine",0.18);
-  } else if(a==="siren"){
-    sweep(t0,0,400,800,0.35,0.3); sweep(t0,0.42,400,800,0.35,0.3);
-  } else if(a==="game"){
-    tone(t0,0,660,0.08,"square",0.25); tone(t0,0.1,660,0.08,"square",0.25); tone(t0,0.2,880,0.12,"square",0.25);
-  } else if(a==="gong"){
-    tone(t0,0,110,1.4,"triangle",0.4);
-  } else if(a==="heartbeat"){
-    tone(t0,0,100,0.15,"sine",0.4); tone(t0,0.22,100,0.15,"sine",0.4);
+  if(a==="clear"){
+    bell(t0,0,880,1.3,0.3,[[1,1,1],[2,0.4,0.7],[3,0.15,0.5],[4.2,0.08,0.4]]);
+  } else if(a==="hand"){
+    bell(t0,0,784,0.9,0.3,[[1,1,1],[1.5,0.3,0.8],[2,0.5,0.7],[3.4,0.2,0.45]]);
+  } else if(a==="church"){
+    bell(t0,0,220,2.6,0.3,[[0.5,0.5,1.2],[1,1,1],[1.2,0.6,0.85],[1.5,0.35,0.7],[2,0.45,0.6],[3,0.18,0.4]]);
+  } else if(a==="tubular"){
+    bell(t0,0,523.25,2.2,0.3,[[1,0.6,1],[2,1,0.9],[2.76,0.5,0.7],[5.4,0.2,0.45]]);
+  } else if(a==="crystal"){
+    bell(t0,0,1174.66,1.6,0.22,[[1,1,1],[2,0.35,0.7],[2.7,0.2,0.55],[4,0.1,0.4]]);
+  } else if(a==="rin"){
+    /* Two detuned partials give the slow shimmer of a singing bowl. */
+    bell(t0,0,1046.5,3.2,0.22,[[1,1,1],[1.004,0.9,1],[2.7,0.12,0.5]]);
+  } else if(a==="triangle"){
+    bell(t0,0,1568,2,0.16,[[1,0.7,1],[1.37,0.6,0.9],[1.83,0.5,0.85],[2.41,0.4,0.75],[3.14,0.25,0.6]]);
+  } else if(a==="dingdong"){
+    bell(t0,0,659.25,1,0.3,[[1,1,1],[2,0.4,0.7],[3,0.15,0.5]]);
+    bell(t0,0.45,523.25,1.7,0.3,[[1,1,1],[2,0.4,0.7],[3,0.15,0.5]]);
+  } else if(a==="glock"){
+    bell(t0,0,1046.5,0.8,0.26,[[1,1,1],[3,0.3,0.6],[5.8,0.12,0.4]]);
+  } else if(a==="jingle"){
+    for(var j=0;j<2;j++){
+      var o=j*0.28;
+      bell(t0,o,2093,0.45,0.12,[[1,1,1],[1.51,0.7,0.8],[2.13,0.5,0.6]]);
+      bell(t0,o+0.04,2349,0.4,0.1,[[1,1,1],[1.47,0.7,0.8]]);
+      bell(t0,o+0.08,2637,0.35,0.09,[[1,1,1],[1.55,0.6,0.8]]);
+    }
   } else {
-    tone(t0,0,880,0.18,"sine",0.35); tone(t0,0.22,880,0.18,"sine",0.35); tone(t0,0.44,880,0.18,"sine",0.35);
+    /* bell — the original */
+    tone(t0,0,659.25,0.9,"triangle",0.3); tone(t0,0,1318.5,0.9,"triangle",0.08);
   }
 }
 function playTick(){
