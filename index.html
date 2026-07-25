@@ -251,7 +251,8 @@ var timers=normTimers(load("act:timers",DEF_TIMERS));
 var tab="record", sub="history", expanded=null;
 var timerSel={}, timerRunning=false, timerPaused=false, timerIndex=-1,
     timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null, audioUnlocked=false,
-    timerPrecounting=false, preCount=0, preCountHandle=null;
+    timerPrecounting=false, preCount=0, preCountHandle=null,
+    speechReady=false, speakHandle=null;
 var ALARM_TYPES=[
   {id:"bell",name:"ベル"},
   {id:"clear",name:"クリアベル"},
@@ -387,6 +388,7 @@ function resetAll(){
   clearInterval(preCountHandle); preCountHandle=null;
   timerRunning=false; timerPaused=false; timerPrecounting=false;
   timerIndex=-1; timerRunQueue=[];
+  stopSpeech();
   exercises=clone(DEF_EX); presets=clone(DEF_PRE); timers=clone(DEF_TIMERS);
   alarmType="bell"; save("act:alarm",alarmType);
   timerSel={}; sessions=[]; expanded=null;
@@ -678,6 +680,37 @@ function playTick(){
   tone(audioCtx.currentTime,0,600,0.08,"sine",0.2);
 }
 
+/* iOS will not speak unless the first utterance is issued from a gesture,
+   so a muted one is queued up front to unlock it. */
+function primeSpeech(){
+  if(speechReady || !window.speechSynthesis) return;
+  try{
+    var u=new SpeechSynthesisUtterance(" ");
+    u.volume=0; u.lang="ja-JP";
+    window.speechSynthesis.speak(u);
+    speechReady=true;
+  }catch(e){}
+}
+function speak(text){
+  if(!text || !window.speechSynthesis) return;
+  try{
+    var sy=window.speechSynthesis;
+    if(sy.speaking||sy.pending) sy.cancel();
+    var u=new SpeechSynthesisUtterance(text);
+    u.lang="ja-JP"; u.rate=1; u.volume=1;
+    sy.speak(u);
+  }catch(e){}
+}
+/* Let the bell ring before the name is read out, rather than over it. */
+function announce(text){
+  clearTimeout(speakHandle);
+  speakHandle=setTimeout(function(){ speak(text); },700);
+}
+function stopSpeech(){
+  clearTimeout(speakHandle); speakHandle=null;
+  try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(e){}
+}
+
 function timerHTML(){
   if(timerPrecounting){
     return '<div class="tseg">まもなく開始</div>'
@@ -738,7 +771,7 @@ function startTimer(){
   var list=timers.filter(function(t){ return timerSel[t.id]!==false; });
   if(!list.length) return;
   timerRunQueue=list.map(function(t){ return {name:t.name,total:t.sec}; });
-  ensureAudio();
+  ensureAudio(); primeSpeech();
   timerPrecounting=true; preCount=5;
   playTick();
   clearInterval(preCountHandle); preCountHandle=setInterval(precountTick,1000);
@@ -758,12 +791,14 @@ function precountTick(){
 function cancelPrecount(){
   clearInterval(preCountHandle); preCountHandle=null;
   timerPrecounting=false; timerRunQueue=[];
+  stopSpeech();
   render();
 }
 function beginRun(){
   timerIndex=0; timerRemaining=timerRunQueue[0].total; timerPaused=false; timerRunning=true;
   timerEndAt=Date.now()+timerRemaining*1000;
   ensureAudio(); playBeep();
+  announce(timerRunQueue[0].name);
   if(navigator.vibrate) navigator.vibrate(150);
   clearInterval(timerHandle); timerHandle=setInterval(tick,250);
   render();
@@ -780,10 +815,12 @@ function advanceSegment(playSound){
   if(timerIndex<timerRunQueue.length-1){
     timerIndex++; timerRemaining=timerRunQueue[timerIndex].total;
     timerEndAt=Date.now()+timerRemaining*1000; timerPaused=false;
+    announce(timerRunQueue[timerIndex].name);
     clearInterval(timerHandle); timerHandle=setInterval(tick,250);
   } else {
     clearInterval(timerHandle); timerHandle=null;
     timerRunning=false; timerIndex=-1; timerRunQueue=[];
+    announce("終了");
     toast("タイマー終了");
   }
   if(tab==="timer") render();
@@ -801,6 +838,7 @@ function toggleTimerPause(){
 function stopTimer(){
   clearInterval(timerHandle); timerHandle=null;
   timerRunning=false; timerPaused=false; timerIndex=-1; timerRunQueue=[];
+  stopSpeech();
   render();
 }
 
@@ -956,7 +994,7 @@ function setTab(){
    fires from a timer callback. Unlock on the first touch anywhere so the
    alarm can sound later. */
 function unlockAudioOnce(){
-  ensureAudio();
+  ensureAudio(); primeSpeech();
   if(audioCtx && audioCtx.state==="running"){
     document.removeEventListener("touchend",unlockAudioOnce,true);
     document.removeEventListener("click",unlockAudioOnce,true);
