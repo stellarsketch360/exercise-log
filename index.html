@@ -147,6 +147,13 @@
     border-radius:9px;padding:11px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;cursor:pointer;}
   .ghost:hover{border-color:var(--red);color:var(--red);}
   .ghost.sm{margin-top:0;width:auto;padding:7px 14px;}
+  .edrow{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--card);}
+  .edname{width:100%;box-sizing:border-box;margin-bottom:8px;}
+  .edtime{display:flex;align-items:center;gap:6px;}
+  .edtime span{font-family:var(--mono);font-size:11px;color:var(--dim);}
+  .ednum{width:62px;flex:0 0 auto;text-align:center;}
+  .edtime .mi{margin-left:auto;}
+  .edtime .mi+.mi{margin-left:0;}
   .ghost.next{margin-top:22px;border-color:var(--red);color:var(--red);}
   .ghost.next:hover{background:var(--red);color:#fff;}
   .ghost.danger{margin-top:28px;color:var(--red);border-color:var(--line);}
@@ -229,38 +236,49 @@ function load(k,d){ try{ var v=canStore?localStorage.getItem(k):mem[k]; return v
 function save(k,v){ try{ var s=JSON.stringify(v); if(canStore)localStorage.setItem(k,s); else mem[k]=s; }catch(e){} }
 
 /* ---------- defaults ---------- */
-var DEF_EX=[
-  {id:"e_chair",name:"椅子"},
-  {id:"e_solo",name:"個人"}
+var DEF_ITEMS=[
+  {id:"i_test",name:"15秒のテスト",sec:15},
+  {id:"i_chair",name:"椅子",sec:600},
+  {id:"i_solo",name:"個人",sec:300}
 ];
 var DEF_PRE=[
   {id:"p1",text:"オープン",pinned:false},
   {id:"p2",text:"周りを見る",pinned:false},
   {id:"p3",text:"いつもと違う動きをする",pinned:false}
 ];
-var DEF_TIMERS=[
-  {id:"tm0",name:"15秒のテスト",sec:15},
-  {id:"tm1",name:"椅子エクササイズ",sec:600},
-  {id:"tm2",name:"個人エクササイズ",sec:300}
-];
-
-function normTimers(list){
+function normItems(list){
   return (list||[]).map(function(t){
-    if(t.sec==null && t.min!=null) return {id:t.id,name:t.name,sec:Math.round(t.min*60)};
-    return t;
+    var sec = t.sec!=null ? t.sec : (t.min!=null ? Math.round(t.min*60) : 300);
+    return {id:t.id,name:t.name,sec:sec};
   });
+}
+/* Earlier versions kept the menu (no durations) and the timer list apart.
+   They are one list now, so fold the old pair together on first run. */
+function loadItems(){
+  var saved=load("act:items",null);
+  if(saved) return normItems(saved);
+  var tm=normItems(load("act:timers",null)||[]);
+  var ex=load("act:exercises",null)||[];
+  if(!tm.length && !ex.length) return clone(DEF_ITEMS);
+  var out=tm.slice();
+  ex.forEach(function(e){
+    /* 椅子 and 椅子エクササイズ are the same thing; keep only one row. */
+    var dup=out.some(function(o){
+      return o.name===e.name || o.name.indexOf(e.name)>=0 || e.name.indexOf(o.name)>=0;
+    });
+    if(!dup) out.push({id:e.id,name:e.name,sec:300});
+  });
+  return out;
 }
 
 /* ---------- state ---------- */
-var exercises=load("act:exercises",DEF_EX);
-/* The original five defaults are already saved on existing devices, so swap
-   them for the new ones — but only if the list was never edited. */
-if(exercises.map(function(e){ return e.id; }).join(",")==="e1,e2,e3,e4,e5") exercises=clone(DEF_EX);
+var items=loadItems();
 var presets=load("act:presets",DEF_PRE);
 var sessions=load("act:sessions",[]);
-var timers=normTimers(load("act:timers",DEF_TIMERS));
+var sel=load("act:sel",{});
 var tab="focus", sub="history", expanded=null, editingId=null, preEditDraft=null;
-var timerSel={}, timerRunning=false, timerPaused=false, timerIndex=-1,
+var timerEditing=false;
+var timerRunning=false, timerPaused=false, timerIndex=-1,
     timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null, audioUnlocked=false,
     timerPrecounting=false, preCount=0, preCountHandle=null,
     speechReady=false, speakHandle=null;
@@ -275,9 +293,9 @@ if(!ALARM_TYPES.some(function(a){ return a.id===alarmType; })) alarmType="bell";
 var draft=restoreDraft();
 
 function persist(){
-  save("act:exercises",exercises); save("act:presets",presets); save("act:sessions",sessions);
-  save("act:timers",timers);
-  if(uidRef) db.collection("users").doc(uidRef).set({exercises:exercises,presets:presets,timers:timers},{merge:true});
+  save("act:items",items); save("act:presets",presets); save("act:sessions",sessions);
+  save("act:sel",sel);
+  if(uidRef) db.collection("users").doc(uidRef).set({items:items,presets:presets},{merge:true});
 }
 function cloudSaveSession(s){ if(uidRef) db.collection("users").doc(uidRef).collection("sessions").doc(s.id).set(s); }
 function cloudDeleteSession(id){ if(uidRef) db.collection("users").doc(uidRef).collection("sessions").doc(id).delete(); }
@@ -325,17 +343,18 @@ function startSync(u){
   var userDoc=db.collection("users").doc(u);
   userDoc.get().then(function(snap){
     if(!snap.exists){
-      userDoc.set({exercises:exercises,presets:presets,timers:timers});
+      userDoc.set({items:items,presets:presets});
       if(sessions.length) cloudAddSessions(sessions);
     }
   }).catch(syncFailed);
   userDoc.onSnapshot(function(snap){
     if(!snap.exists) return;
     var d=snap.data();
-    if(d.exercises) exercises=d.exercises;
+    /* d.timers is what older builds wrote before the two lists merged. */
+    if(d.items) items=normItems(d.items);
+    else if(d.timers) items=normItems(d.timers);
     if(d.presets) presets=d.presets;
-    if(d.timers) timers=normTimers(d.timers);
-    save("act:exercises",exercises); save("act:presets",presets); save("act:timers",timers);
+    save("act:items",items); save("act:presets",presets);
     render();
   },syncFailed);
   userDoc.collection("sessions").onSnapshot(function(qs){
@@ -382,10 +401,10 @@ function sample(days){
   for(var b=n;b>=0;b--){
     if(!chance(0.6)) continue;               /* rest days leave natural gaps */
     var d=new Date(base); d.setDate(d.getDate()-b);
-    var items=exercises.map(function(e){
+    var recItems=items.map(function(e){
       return {exId:e.id,name:e.name,done:chance(0.78),note:chance(0.22)?pick(TXT_NOTE):""};
     });
-    if(items.length && !items.some(function(i){ return i.done; })) items[0].done=true;
+    if(recItems.length && !recItems.some(function(i){ return i.done; })) recItems[0].done=true;
     var prog=n?(n-b)/n:1;                    /* drift upward so trends show */
     var feel=Math.max(35,Math.min(97,Math.round(52+prog*28+(Math.random()*24-12))));
     var focus=[], pool=presets.map(function(p){ return p.text; });
@@ -400,7 +419,7 @@ function sample(days){
       body:chance(0.8)?pick(TXT_BODY):"",
       mind:chance(0.8)?pick(TXT_MIND):"",
       thought:chance(0.75)?pick(TXT_THOUGHT):"",
-      items:items});
+      items:recItems});
   }
   return out.reverse();                      /* newest first, as the app expects */
 }
@@ -412,10 +431,10 @@ function resetAll(){
   timerRunning=false; timerPaused=false; timerPrecounting=false;
   timerIndex=-1; timerRunQueue=[];
   stopSpeech();
-  exercises=clone(DEF_EX); presets=clone(DEF_PRE); timers=clone(DEF_TIMERS);
+  items=clone(DEF_ITEMS); presets=clone(DEF_PRE); sel={};
   alarmType="bell"; save("act:alarm",alarmType);
-  timerSel={}; sessions=[]; expanded=null; editingId=null; preEditDraft=null;
-  draft=blankDraft(); clearDraft();
+  sessions=[]; expanded=null; editingId=null; preEditDraft=null;
+  draft=blankDraft(); clearDraft(); clearTimerState();
   persist(); cloudDeleteAllSessions();
 }
 
@@ -424,6 +443,9 @@ var view=document.getElementById("view");
 var savebar=document.getElementById("savebar");
 var saveBtn=document.getElementById("saveBtn");
 
+/* Unchecked items stay in the list — they are just not part of today. */
+function isSel(id){ return sel[id]!==false; }
+function selectedItems(){ return items.filter(function(t){ return isSel(t.id); }); }
 function blankDraft(){
   return {date:today(),time:now(),done:{},notes:{},focus:[],comment:"",
     body:"",mind:"",thought:"",feel:50};
@@ -440,14 +462,15 @@ function findSession(id){
   var m=sessions.filter(function(s){ return s.id===id; });
   return m.length?m[0]:null;
 }
-/* An old record can reference an exercise since removed from the menu. Keep
-   those rows while editing so saving does not silently drop them. */
-function rowExercises(){
+/* Today's menu is whatever is ticked on the timer screen. When editing an old
+   record, show what it actually contained too — including items since removed
+   or unticked — so saving cannot silently drop them. */
+function menuItems(){
   var s=editingId?findSession(editingId):null;
-  if(!s) return exercises;
-  var list=exercises.slice();
-  s.items.forEach(function(i){
-    if(!list.some(function(e){ return e.id===i.exId; })) list.push({id:i.exId,name:i.name});
+  if(!s) return selectedItems();
+  var list=s.items.map(function(i){ return {id:i.exId,name:i.name}; });
+  selectedItems().forEach(function(t){
+    if(!list.some(function(o){ return o.id===t.id; })) list.push(t);
   });
   return list;
 }
@@ -562,7 +585,7 @@ function recordHTML(){
   }
 
   h+='<div class="sec"><div class="cue lbl">本日のメニュー</div><div class="ex">';
-  rowExercises().forEach(function(e){
+  menuItems().forEach(function(e){
     var on=!!draft.done[e.id];
     h+='<div class="exrow'+(on?" done":"")+'">'
      + '<div class="exhead" data-toggle="'+e.id+'"><div class="box'+(on?" on":"")+'">✓</div>'
@@ -643,11 +666,11 @@ function addFocus(){
 }
 
 saveBtn.onclick=function(){
-  var items=rowExercises().map(function(e){
+  var recItems=menuItems().map(function(e){
     return {exId:e.id,name:e.name,done:!!draft.done[e.id],note:(draft.notes[e.id]||"").trim()};
   });
   var editing=!!editingId;
-  var session={id:editingId||uid(),date:draft.date,time:draft.time,items:items,
+  var session={id:editingId||uid(),date:draft.date,time:draft.time,items:recItems,
     focus:draft.focus.slice(),comment:draft.comment.trim(),
     body:draft.body.trim(),mind:draft.mind.trim(),thought:draft.thought.trim(),feel:draft.feel};
   if(editing){
@@ -715,7 +738,7 @@ function reviewHTML(){
        + '<div class="big">'+avg+'<span>%</span></div></div>';
     }
     h+='<div class="cue" style="margin:22px 0 4px">メニュー実施率</div>';
-    exercises.forEach(function(e){
+    items.forEach(function(e){
       var c=sessions.filter(function(s){
         return s.items.some(function(i){ return i.exId===e.id && i.done; }); }).length;
       var p=Math.round(c/sessions.length*100);
@@ -885,20 +908,46 @@ function timerHTML(){
      + '<button class="tbtn sub" id="tstop">終了</button></div>';
     return h;
   }
-  if(!timers.length) return '<div class="blank">タイマー項目がまだない。<br>⚙ から追加しよう。</div>';
-  var h='<div class="cue lbl" style="margin-bottom:10px">今日のタイマー</div><div class="ex">';
-  timers.forEach(function(t){
-    var on=timerSel[t.id]!==false;
+  if(timerEditing) return editItemsHTML();
+  if(!items.length) return '<div class="blank">項目がまだない。</div>'
+   + '<button class="ghost" id="editItems">項目を編集</button>';
+
+  var h='<div class="cue lbl" style="margin-bottom:10px">今日やること</div><div class="ex">';
+  items.forEach(function(t){
+    var on=isSel(t.id);
     h+='<div class="exrow'+(on?" done":"")+'"><div class="exhead" data-tsel="'+t.id+'">'
      + '<div class="box'+(on?" on":"")+'">✓</div><div class="exname">'+esc(t.name)+'</div>'
      + '<span class="badge">'+fmtDur(t.sec)+'</span></div></div>';
   });
   h+='</div>';
-  var total=timers.filter(function(t){ return timerSel[t.id]!==false; })
-    .reduce(function(a,t){ return a+t.sec; },0);
+  var total=selectedItems().reduce(function(a,t){ return a+t.sec; },0);
   h+='<div class="tsum">合計 '+fmtDur(total)+'</div>';
   h+='<button class="save" id="tstart"'+(total===0?" disabled":"")+'>スタート</button>';
+  h+='<button class="ghost" id="editItems">項目を編集</button>';
   h+='<button class="ghost next" id="toRecord">記録へ →</button>';
+  return h;
+}
+
+/* Editing never removes an item from the list just because it is unticked —
+   it stays for whenever it comes round again. */
+function editItemsHTML(){
+  var h='<div class="cue lbl" style="margin-bottom:10px">項目を編集</div>';
+  if(!items.length) h+='<div class="blank">下から追加しよう。</div>';
+  items.forEach(function(t,i){
+    h+='<div class="edrow">'
+     + '<input class="edname" type="text" data-iname="'+t.id+'" value="'+esc(t.name)+'">'
+     + '<div class="edtime">'
+     + '<input class="ednum" type="number" min="0" data-imin="'+t.id+'" value="'+Math.floor(t.sec/60)+'"><span>分</span>'
+     + '<input class="ednum" type="number" min="0" max="59" data-isec="'+t.id+'" value="'+(t.sec%60)+'"><span>秒</span>'
+     + '<button class="mi" data-iup="'+i+'">▲</button>'
+     + '<button class="mi" data-idown="'+i+'">▼</button>'
+     + '<button class="mi" data-idel="'+t.id+'">🗑</button>'
+     + '</div></div>';
+  });
+  h+='<div class="addrow" style="margin-top:14px"><input type="text" id="nin" placeholder="項目名…" style="flex:2">'
+   + '<input type="number" id="nim" placeholder="分" min="0" style="flex:1;max-width:64px">'
+   + '<button class="add" id="addItem">＋ 追加</button></div>';
+  h+='<button class="save" id="doneEdit">編集を終える</button>';
   return h;
 }
 
@@ -913,20 +962,107 @@ function bindTimer(){
     document.getElementById("tstop").onclick=stopTimer;
     return;
   }
+  if(timerEditing){ bindItemEditor(); return; }
   [].forEach.call(view.querySelectorAll("[data-tsel]"),function(el){
     el.onclick=function(){ var id=el.getAttribute("data-tsel");
-      timerSel[id]=!(timerSel[id]!==false); render(); };
+      sel[id]=!isSel(id); persist(); render(); };
   });
   var startBtn=document.getElementById("tstart");
   if(startBtn) startBtn.onclick=startTimer;
+  var ei=document.getElementById("editItems");
+  if(ei) ei.onclick=function(){ timerEditing=true; render(); };
   var tr=document.getElementById("toRecord");
   if(tr) tr.onclick=function(){ tab="record"; setTab(); render(); };
 }
 
+function itemById(id){
+  var m=items.filter(function(t){ return t.id===id; });
+  return m.length?m[0]:null;
+}
+function setItemSec(id,mins,secs){
+  var t=itemById(id); if(!t) return;
+  t.sec=Math.max(1,(mins|0)*60+(secs|0));
+  persist();
+}
+function bindItemEditor(){
+  [].forEach.call(view.querySelectorAll("[data-iname]"),function(el){
+    el.oninput=function(){ var t=itemById(el.getAttribute("data-iname"));
+      if(t){ t.name=el.value; persist(); } };
+  });
+  function timeHandler(attr){
+    return function(el){
+      el.onchange=function(){
+        var id=el.getAttribute(attr), row=view.querySelector('[data-imin="'+id+'"]');
+        var s=view.querySelector('[data-isec="'+id+'"]');
+        setItemSec(id,+row.value||0,+s.value||0);
+      };
+    };
+  }
+  [].forEach.call(view.querySelectorAll("[data-imin]"),timeHandler("data-imin"));
+  [].forEach.call(view.querySelectorAll("[data-isec]"),timeHandler("data-isec"));
+  [].forEach.call(view.querySelectorAll("[data-iup]"),function(el){
+    el.onclick=function(){ var i=+el.getAttribute("data-iup"); if(i>0){
+      var a=items[i-1]; items[i-1]=items[i]; items[i]=a; persist(); render(); } };
+  });
+  [].forEach.call(view.querySelectorAll("[data-idown]"),function(el){
+    el.onclick=function(){ var i=+el.getAttribute("data-idown"); if(i<items.length-1){
+      var a=items[i+1]; items[i+1]=items[i]; items[i]=a; persist(); render(); } };
+  });
+  [].forEach.call(view.querySelectorAll("[data-idel]"),function(el){
+    el.onclick=function(){ var id=el.getAttribute("data-idel"), t=itemById(id);
+      if(!t || !confirm("「"+t.name+"」を削除する？")) return;
+      items=items.filter(function(x){ return x.id!==id; });
+      delete sel[id]; persist(); render(); };
+  });
+  document.getElementById("addItem").onclick=function(){
+    var n=document.getElementById("nin"), m=document.getElementById("nim");
+    var v=n.value.trim(); if(!v) return;
+    items.push({id:uid(),name:v,sec:Math.max(1,Math.round((+m.value||1)*60))});
+    n.value=""; m.value=""; persist(); render();
+  };
+  document.getElementById("doneEdit").onclick=function(){ timerEditing=false; render(); };
+}
+
+/* iOS discards a backgrounded page, which used to lose a running timer
+   entirely. The run is kept on disk and rebuilt from the wall clock. */
+function saveTimerState(){
+  if(!timerRunning){ clearTimerState(); return; }
+  save("act:timer",{queue:timerRunQueue,index:timerIndex,endAt:timerEndAt,
+    paused:timerPaused,remaining:timerRemaining});
+}
+function clearTimerState(){ save("act:timer",null); }
+function restoreTimer(){
+  var st=load("act:timer",null);
+  if(!st || !st.queue || !st.queue.length) return;
+  timerRunQueue=st.queue; timerIndex=st.index||0;
+  if(st.paused){
+    timerRunning=true; timerPaused=true; timerRemaining=st.remaining;
+    tab="timer"; return;
+  }
+  /* Roll forward over whatever elapsed while the page was gone. */
+  var end=st.endAt;
+  while(timerIndex<timerRunQueue.length && end<=Date.now()){
+    var f=timerRunQueue[timerIndex];
+    if(f && f.id) draft.done[f.id]=true;
+    timerIndex++;
+    if(timerIndex<timerRunQueue.length) end+=timerRunQueue[timerIndex].total*1000;
+  }
+  if(timerIndex>=timerRunQueue.length){
+    saveDraft(); clearTimerState();
+    timerRunQueue=[]; timerIndex=-1; tab="record";   /* it finished while away */
+    return;
+  }
+  saveDraft();
+  timerRunning=true; timerPaused=false; timerEndAt=end;
+  timerRemaining=Math.max(0,Math.round((end-Date.now())/1000));
+  tab="timer";
+  timerHandle=setInterval(tick,250);
+}
+
 function startTimer(){
-  var list=timers.filter(function(t){ return timerSel[t.id]!==false; });
+  var list=selectedItems();
   if(!list.length) return;
-  timerRunQueue=list.map(function(t){ return {name:t.name,total:t.sec}; });
+  timerRunQueue=list.map(function(t){ return {id:t.id,name:t.name,total:t.sec}; });
   ensureAudio(); primeSpeech();
   timerPrecounting=true; preCount=5;
   playTick();
@@ -957,6 +1093,7 @@ function beginRun(){
   announce(timerRunQueue[0].name);
   if(navigator.vibrate) navigator.vibrate(150);
   clearInterval(timerHandle); timerHandle=setInterval(tick,250);
+  saveTimerState();
   render();
 }
 function tick(){
@@ -967,19 +1104,28 @@ function tick(){
   if(tab==="timer") render();
 }
 function advanceSegment(playSound){
-  if(playSound){ ensureAudio(); playBeep(); if(navigator.vibrate) navigator.vibrate([250,120,250]); }
+  if(playSound){
+    ensureAudio(); playBeep();
+    /* Finishing a segment ticks it off today's menu. Skipping does not. */
+    var fin=timerRunQueue[timerIndex];
+    if(fin && fin.id){ draft.done[fin.id]=true; saveDraft(); }
+    if(navigator.vibrate) navigator.vibrate([250,120,250]);
+  }
   if(timerIndex<timerRunQueue.length-1){
     timerIndex++; timerRemaining=timerRunQueue[timerIndex].total;
     timerEndAt=Date.now()+timerRemaining*1000; timerPaused=false;
     announce(timerRunQueue[timerIndex].name);
     clearInterval(timerHandle); timerHandle=setInterval(tick,250);
+    saveTimerState();
+    if(tab==="timer") render();
   } else {
     clearInterval(timerHandle); timerHandle=null;
     timerRunning=false; timerIndex=-1; timerRunQueue=[];
+    clearTimerState();
     announce("終了");
     toast("タイマー終了");
+    tab="record"; setTab(); render();   /* straight on to writing it up */
   }
-  if(tab==="timer") render();
 }
 function toggleTimerPause(){
   if(!timerPaused){
@@ -989,12 +1135,13 @@ function toggleTimerPause(){
     timerPaused=false; timerEndAt=Date.now()+timerRemaining*1000;
     clearInterval(timerHandle); timerHandle=setInterval(tick,250);
   }
+  saveTimerState();
   render();
 }
 function stopTimer(){
   clearInterval(timerHandle); timerHandle=null;
   timerRunning=false; timerPaused=false; timerIndex=-1; timerRunQueue=[];
-  stopSpeech();
+  clearTimerState(); stopSpeech();
   render();
 }
 
@@ -1007,17 +1154,7 @@ function openSheet(){
    + '<div class="sheethead"><div class="sheettitle">項目を編集</div>'
    + '<button class="ico" id="close">✕</button></div>';
 
-  h+='<div class="cue">エクササイズ項目</div><div class="mlist">';
-  exercises.forEach(function(e,i){
-    h+='<div class="mrow"><span class="mname">'+esc(e.name)+'</span>'
-     + '<button class="mi" data-up="'+i+'">▲</button>'
-     + '<button class="mi" data-down="'+i+'">▼</button>'
-     + '<button class="mi" data-delex="'+e.id+'">🗑</button></div>';
-  });
-  h+='</div><div class="addrow"><input type="text" id="ne" placeholder="エクササイズを追加…">'
-   + '<button class="add" id="addE">＋ 追加</button></div>';
-
-  h+='<div class="cue" style="margin-top:24px">意識することの定型</div><div class="mlist">';
+  h+='<div class="cue">意識することの定型</div><div class="mlist">';
   presets.slice().sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0); }).forEach(function(p){
     h+='<div class="mrow"><span class="mname s">'+esc(p.text)+'</span>'
      + '<button class="mi'+(p.pinned?" on":"")+'" data-pin="'+p.id+'">★</button>'
@@ -1025,18 +1162,6 @@ function openSheet(){
   });
   h+='</div><div class="addrow"><input type="text" id="np" placeholder="定型を追加…">'
    + '<button class="add" id="addP">＋ 追加</button></div>';
-
-  h+='<div class="cue" style="margin-top:24px">タイマー項目</div><div class="mlist">';
-  timers.forEach(function(t,i){
-    h+='<div class="mrow"><span class="mname">'+esc(t.name)+'</span>'
-     + '<span class="badge" style="margin-right:4px">'+fmtDur(t.sec)+'</span>'
-     + '<button class="mi" data-tup="'+i+'">▲</button>'
-     + '<button class="mi" data-tdown="'+i+'">▼</button>'
-     + '<button class="mi" data-deltm="'+t.id+'">🗑</button></div>';
-  });
-  h+='</div><div class="addrow"><input type="text" id="ntn" placeholder="名前…" style="flex:2">'
-   + '<input type="number" id="ntm" placeholder="分" min="1" style="flex:1;max-width:70px">'
-   + '<button class="add" id="addTM">＋ 追加</button></div>';
 
   h+='<div class="cue" style="margin-top:24px">アラーム音</div><div class="mlist">';
   ALARM_TYPES.forEach(function(a){
@@ -1057,18 +1182,6 @@ function openSheet(){
   document.getElementById("scrim").onclick=function(e){ if(e.target.id==="scrim") close(); };
   document.getElementById("close").onclick=close;
 
-  [].forEach.call(modal.querySelectorAll("[data-up]"),function(el){
-    el.onclick=function(){ var i=+el.getAttribute("data-up"); if(i>0){
-      var a=exercises[i-1]; exercises[i-1]=exercises[i]; exercises[i]=a; persist(); openSheet(); } };
-  });
-  [].forEach.call(modal.querySelectorAll("[data-down]"),function(el){
-    el.onclick=function(){ var i=+el.getAttribute("data-down"); if(i<exercises.length-1){
-      var a=exercises[i+1]; exercises[i+1]=exercises[i]; exercises[i]=a; persist(); openSheet(); } };
-  });
-  [].forEach.call(modal.querySelectorAll("[data-delex]"),function(el){
-    el.onclick=function(){ var id=el.getAttribute("data-delex");
-      exercises=exercises.filter(function(x){ return x.id!==id; }); persist(); openSheet(); };
-  });
   [].forEach.call(modal.querySelectorAll("[data-pin]"),function(el){
     el.onclick=function(){ var id=el.getAttribute("data-pin");
       presets=presets.map(function(p){ return p.id===id?{id:p.id,text:p.text,pinned:!p.pinned}:p; });
@@ -1078,31 +1191,9 @@ function openSheet(){
     el.onclick=function(){ var id=el.getAttribute("data-delp");
       presets=presets.filter(function(x){ return x.id!==id; }); persist(); openSheet(); };
   });
-  document.getElementById("addE").onclick=function(){
-    var v=document.getElementById("ne").value.trim(); if(!v) return;
-    exercises.push({id:uid(),name:v}); persist(); openSheet();
-  };
   document.getElementById("addP").onclick=function(){
     var v=document.getElementById("np").value.trim(); if(!v) return;
     presets.unshift({id:uid(),text:v,pinned:false}); persist(); openSheet();
-  };
-  [].forEach.call(modal.querySelectorAll("[data-tup]"),function(el){
-    el.onclick=function(){ var i=+el.getAttribute("data-tup"); if(i>0){
-      var a=timers[i-1]; timers[i-1]=timers[i]; timers[i]=a; persist(); openSheet(); } };
-  });
-  [].forEach.call(modal.querySelectorAll("[data-tdown]"),function(el){
-    el.onclick=function(){ var i=+el.getAttribute("data-tdown"); if(i<timers.length-1){
-      var a=timers[i+1]; timers[i+1]=timers[i]; timers[i]=a; persist(); openSheet(); } };
-  });
-  [].forEach.call(modal.querySelectorAll("[data-deltm]"),function(el){
-    el.onclick=function(){ var id=el.getAttribute("data-deltm");
-      timers=timers.filter(function(x){ return x.id!==id; }); persist(); openSheet(); };
-  });
-  document.getElementById("addTM").onclick=function(){
-    var v=document.getElementById("ntn").value.trim();
-    var m=+document.getElementById("ntm").value;
-    if(!v || !m || m<=0) return;
-    timers.push({id:uid(),name:v,sec:Math.round(m*60)}); persist(); openSheet();
   };
   [].forEach.call(modal.querySelectorAll("[data-prevalarm]"),function(el){
     el.onclick=function(){ ensureAudio(); playBeep(el.getAttribute("data-prevalarm")); };
@@ -1149,6 +1240,9 @@ function setTab(){
 [].forEach.call(document.querySelectorAll(".tab"),function(b){
   b.onclick=function(){ tab=b.getAttribute("data-tab"); setTab(); render(); };
 });
+
+restoreTimer();
+setTab();
 
 /* iOS unlocks audio only inside a real user gesture, and the alarm itself
    fires from a timer callback. Unlock on the first touch anywhere so the
