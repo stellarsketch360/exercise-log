@@ -65,10 +65,6 @@
     display:grid;place-items:center;color:transparent;font-size:13px;font-weight:700;}
   .box.on{background:var(--red);border-color:var(--red);color:#fff;}
   .exname{flex:1;font-size:14.5px;}
-  .note{margin-top:9px;width:100%;background:transparent;border:none;
-    border-bottom:1px dashed var(--line);color:var(--dim);font-size:12.5px;
-    font-family:var(--mono);padding:3px 0;border-radius:0;}
-  .note:focus{border-bottom-color:var(--red);color:var(--ink);}
   .feelrow{display:flex;align-items:center;gap:16px;}
   input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:4px;border-radius:99px;
     background:var(--line);outline:none;padding:0;border:none;}
@@ -413,7 +409,6 @@ var TXT_THOUGHT=["考えが先に走っていた。","余計な判断をせず�
 var TXT_COMMENT=["途中で集中が切れた。","短時間でも整った。","終わったあと呼吸が楽になった。",
   "時間がなくて駆け足。","今日は無理せず軽めに。","久々に良い手応え。","夜にやると集中が散る。",
   "後半になって調子が上がった。"];
-var TXT_NOTE=["ゆっくりめ","少し痛みあり","調子よい","短めに","丁寧に"];
 
 /* Builds a plausible history for testing. Uses the current exercise and
    preset lists rather than fixed names, so it stays valid after edits. */
@@ -425,7 +420,7 @@ function sample(days){
     if(!chance(0.6)) continue;               /* rest days leave natural gaps */
     var d=new Date(base); d.setDate(d.getDate()-b);
     var recItems=items.map(function(e){
-      return {exId:e.id,name:e.name,done:chance(0.78),note:chance(0.22)?pick(TXT_NOTE):""};
+      return {exId:e.id,name:e.name,done:chance(0.78)};
     });
     if(recItems.length && !recItems.some(function(i){ return i.done; })) recItems[0].done=true;
     var prog=n?(n-b)/n:1;                    /* drift upward so trends show */
@@ -533,7 +528,7 @@ function hasContent(){
 }
 
 /* Identifies a field well enough to find its replacement after a rebuild. */
-var FOCUS_ATTRS=["data-iname","data-imin","data-isec","data-note"];
+var FOCUS_ATTRS=["data-iname","data-imin","data-isec"];
 function focusKey(el){
   if(!el || !el.getAttribute) return null;
   for(var i=0;i<FOCUS_ATTRS.length;i++){
@@ -638,19 +633,18 @@ function recordHTML(){
     h+='<div class="exrow'+(on?" done":"")+'">'
      + '<div class="exhead" data-toggle="'+e.id+'"><div class="box'+(on?" on":"")+'">✓</div>'
      + '<div class="exname">'+esc(e.name)+'</div></div>'
-     + '<input class="note" type="text" placeholder="メモ…" data-note="'+e.id+'" value="'+esc(draft.notes[e.id]||"")+'">'
      + '</div>';
   });
   h+='</div></div>';
 
   h+='<div class="sec"><div class="cue lbl">体の調子</div>'
-   + '<textarea id="bd" placeholder="今日の体の感覚…">'+esc(draft.body)+'</textarea></div>';
+   + '<textarea id="bd" placeholder="今の体の感覚…">'+esc(draft.body)+'</textarea></div>';
   h+='<div class="sec"><div class="cue lbl">心の調子</div>'
-   + '<textarea id="md" placeholder="今日の心の状態…">'+esc(draft.mind)+'</textarea></div>';
+   + '<textarea id="md" placeholder="今の心の状態…">'+esc(draft.mind)+'</textarea></div>';
   h+='<div class="sec"><div class="cue lbl">思考の調子</div>'
-   + '<textarea id="th" placeholder="今日の思考の状態…">'+esc(draft.thought)+'</textarea></div>';
+   + '<textarea id="th" placeholder="今の思考の状態…">'+esc(draft.thought)+'</textarea></div>';
   h+='<div class="sec"><div class="cue lbl">全体の感想</div>'
-   + '<textarea id="cm" placeholder="今日をふりかえって…">'+esc(draft.comment)+'</textarea></div>';
+   + '<textarea id="cm" placeholder="気づきなど…">'+esc(draft.comment)+'</textarea></div>';
 
   h+='<div class="sec"><div class="cue lbl">手応え</div><div class="feelrow">'
    + '<input type="range" id="fe" min="0" max="100" step="5" value="'+draft.feel+'">'
@@ -689,9 +683,6 @@ function bindRecord(){
     el.onclick=function(){ var id=el.getAttribute("data-toggle");
       draft.done[id]=!draft.done[id]; saveDraft(); render(); };
   });
-  [].forEach.call(view.querySelectorAll("[data-note]"),function(el){
-    el.oninput=function(){ draft.notes[el.getAttribute("data-note")]=el.value; saveDraft(); };
-  });
   bindFocusControls();
   var bf=document.getElementById("backFocus");
   if(bf) bf.onclick=function(){ tab="focus"; setTab(); render(); };
@@ -718,6 +709,8 @@ function addFocus(){
 
 saveBtn.onclick=function(){
   var recItems=menuItems().map(function(e){
+    /* Per-item memos are no longer editable, but records written before that
+       still carry one — write it back so editing an old record keeps it. */
     return {exId:e.id,name:e.name,done:!!draft.done[e.id],note:(draft.notes[e.id]||"").trim()};
   });
   var editing=!!editingId;
