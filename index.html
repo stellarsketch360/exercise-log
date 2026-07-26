@@ -217,7 +217,7 @@ var firebaseConfig = {
   appId: "1:544048989758:web:a8a1dab99f6bb73c9ab36f"
 };
 var fbReady = firebaseConfig.apiKey.indexOf("YOUR_") !== 0;
-var db=null, uidRef=null, synced=false;
+var db=null, uidRef=null, synced=false, syncError="";
 
 /* ---------- storage (localStorage + memory fallback, used as offline cache) ---------- */
 var mem={}, canStore=true;
@@ -309,6 +309,17 @@ function toast(m){ var t=document.getElementById("toast");
   setTimeout(function(){ t.innerHTML=""; },1700); }
 
 /* ---------- firebase sync ---------- */
+/* Without this the app just sits on 同期中… forever when the Firebase
+   project is reachable but not set up, giving no hint as to why. */
+function syncFailed(e){
+  var c=(e&&e.code)||"";
+  syncError = c.indexOf("permission-denied")>=0 ? "Firestoreのセキュリティルールに拒否されました。"
+    : c.indexOf("unauthenticated")>=0 ? "匿名ログインが有効になっていません。"
+    : c.indexOf("not-found")>=0 ? "Firestoreデータベースが作成されていません。"
+    : c.indexOf("unavailable")>=0 ? "Firebaseに接続できません。"
+    : "同期に失敗しました。"+(c?"（"+c+"）":"");
+  render();
+}
 function startSync(u){
   uidRef=u;
   var userDoc=db.collection("users").doc(u);
@@ -317,7 +328,7 @@ function startSync(u){
       userDoc.set({exercises:exercises,presets:presets,timers:timers});
       if(sessions.length) cloudAddSessions(sessions);
     }
-  });
+  }).catch(syncFailed);
   userDoc.onSnapshot(function(snap){
     if(!snap.exists) return;
     var d=snap.data();
@@ -326,7 +337,7 @@ function startSync(u){
     if(d.timers) timers=normTimers(d.timers);
     save("act:exercises",exercises); save("act:presets",presets); save("act:timers",timers);
     render();
-  });
+  },syncFailed);
   userDoc.collection("sessions").onSnapshot(function(qs){
     var list=[];
     qs.forEach(function(doc){ list.push(doc.data()); });
@@ -335,8 +346,8 @@ function startSync(u){
       return a.time<b.time?1:-1;
     });
     sessions=list; save("act:sessions",sessions);
-    synced=true; render();
-  });
+    synced=true; syncError=""; render();
+  },syncFailed);
 }
 if(fbReady){
   firebase.initializeApp(firebaseConfig);
@@ -344,7 +355,7 @@ if(fbReady){
   firebase.auth().onAuthStateChanged(function(user){
     if(user) startSync(user.uid);
   });
-  firebase.auth().signInAnonymously().catch(function(){ toast("同期に失敗しました"); });
+  firebase.auth().signInAnonymously().catch(syncFailed);
 }
 
 /* ---------- test data (opt-in) ---------- */
@@ -476,6 +487,8 @@ function hasContent(){
 }
 
 function render(){
+  /* Firebase callbacks can fire before these elements are looked up below. */
+  if(!view || !savebar) return;
   savebar.style.display = tab==="record" ? "block" : "none";
   document.getElementById("gear").style.visibility = tab==="review" ? "hidden" : "visible";
   view.innerHTML = tab==="focus" ? focusHTML() : tab==="record" ? recordHTML()
@@ -495,6 +508,7 @@ function statusHTML(){
   var h="";
   if(!canStore) h+='<div class="warn">このプレビューでは保存できません。HTMLファイルをブラウザで開けば記録は端末に保存されます。</div>';
   if(!fbReady) h+='<div class="warn">Firebase未設定：今はこの端末にのみ保存されています。設定すると全端末で同期されます。</div>';
+  else if(syncError) h+='<div class="warn">'+esc(syncError)+'<br>記録はこの端末には保存されています。</div>';
   else h+='<div class="small"><span class="syncdot'+(synced?" on":"")+'"></span>'+(synced?"クラウドに同期済み":"同期中…")+'</div>';
   return h;
 }
