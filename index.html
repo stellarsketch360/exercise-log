@@ -293,9 +293,18 @@ var alarmType=load("act:alarm","bell");
 if(!ALARM_TYPES.some(function(a){ return a.id===alarmType; })) alarmType="bell";
 var draft=restoreDraft();
 
+var cloudHandle=null;
+/* Local save is immediate; the cloud write waits so that typing a name does
+   not fire one request per keystroke. */
 function persist(){
   save("act:items",items); save("act:presets",presets); save("act:sessions",sessions);
   save("act:sel",sel);
+  if(!uidRef) return;
+  clearTimeout(cloudHandle);
+  cloudHandle=setTimeout(flushCloud,500);
+}
+function flushCloud(){
+  clearTimeout(cloudHandle); cloudHandle=null;
   if(uidRef) db.collection("users").doc(uidRef).set({items:items,presets:presets},{merge:true});
 }
 function cloudSaveSession(s){ if(uidRef) db.collection("users").doc(uidRef).collection("sessions").doc(s.id).set(s); }
@@ -359,11 +368,15 @@ function startSync(u){
     if(!snap.exists) return;
     var d=snap.data();
     /* d.timers is what older builds wrote before the two lists merged. */
-    if(d.items) items=normItems(d.items);
-    else if(d.timers) items=normItems(d.timers);
-    if(d.presets) presets=d.presets;
+    var nextItems = d.items ? normItems(d.items) : (d.timers ? normItems(d.timers) : items);
+    var nextPresets = d.presets || presets;
+    /* Our own writes echo back here. Re-rendering on those would rebuild the
+       view under the user and drop the caret mid-edit. */
+    var changed = JSON.stringify(nextItems)!==JSON.stringify(items)
+      || JSON.stringify(nextPresets)!==JSON.stringify(presets);
+    items=nextItems; presets=nextPresets;
     save("act:items",items); save("act:presets",presets);
-    render();
+    if(changed) render();
   },syncFailed);
   userDoc.collection("sessions").onSnapshot(function(qs){
     var list=[];
@@ -372,8 +385,10 @@ function startSync(u){
       if(a.date!==b.date) return a.date<b.date?1:-1;
       return a.time<b.time?1:-1;
     });
+    var changed = JSON.stringify(list)!==JSON.stringify(sessions) || !synced || syncError;
     sessions=list; save("act:sessions",sessions);
-    synced=true; syncError=""; render();
+    synced=true; syncError="";
+    if(changed) render();
   },syncFailed);
 }
 if(fbReady){
@@ -517,9 +532,33 @@ function hasContent(){
     || draft.body.trim()!=="" || draft.mind.trim()!=="" || draft.thought.trim()!=="";
 }
 
+/* Identifies a field well enough to find its replacement after a rebuild. */
+var FOCUS_ATTRS=["data-iname","data-imin","data-isec","data-note"];
+function focusKey(el){
+  if(!el || !el.getAttribute) return null;
+  for(var i=0;i<FOCUS_ATTRS.length;i++){
+    var v=el.getAttribute(FOCUS_ATTRS[i]);
+    if(v!=null) return "["+FOCUS_ATTRS[i]+'="'+v+'"]';
+  }
+  return el.id ? "#"+el.id : null;
+}
+function restoreFocus(key,s,e){
+  if(!key) return;
+  var el=view.querySelector(key);
+  if(!el) return;
+  el.focus();
+  if(s!=null){ try{ el.setSelectionRange(s,e); }catch(err){} }
+}
+
 function render(){
   /* Firebase callbacks can fire before these elements are looked up below. */
   if(!view || !savebar) return;
+  /* Rebuilding innerHTML destroys whatever is focused, so note where the
+     caret was and put it back afterwards. */
+  var ae=document.activeElement;
+  var fkey=(ae && view.contains(ae)) ? focusKey(ae) : null;
+  var fs=null, fe=null;
+  if(fkey){ try{ fs=ae.selectionStart; fe=ae.selectionEnd; }catch(e){} }
   savebar.style.display = tab==="record" ? "block" : "none";
   document.getElementById("gear").style.visibility = tab==="review" ? "hidden" : "visible";
   view.innerHTML = tab==="focus" ? focusHTML() : tab==="record" ? recordHTML()
@@ -533,6 +572,7 @@ function render(){
   }
   else if(tab==="review") bindReview();
   else bindTimer();
+  restoreFocus(fkey,fs,fe);
 }
 
 function statusHTML(){
@@ -1268,7 +1308,8 @@ document.addEventListener("touchend",unlockAudioOnce,true);
 document.addEventListener("click",unlockAudioOnce,true);
 /* Safari can suspend the context when the page is backgrounded. */
 document.addEventListener("visibilitychange",function(){
-  if(!document.hidden && audioCtx && audioCtx.state==="suspended") audioCtx.resume();
+  if(document.hidden){ if(cloudHandle) flushCloud(); return; }
+  if(audioCtx && audioCtx.state==="suspended") audioCtx.resume();
 });
 
 render();
