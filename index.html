@@ -314,8 +314,15 @@ function uid(){ return Math.random().toString(36).slice(2,9); }
 function pad(n){ return (n<10?"0":"")+n; }
 function fmtDur(sec){
   if(sec<60) return sec+"秒";
-  var m=Math.floor(sec/60), s=sec%60;
+  var hh=Math.floor(sec/3600), m=Math.floor(sec%3600/60), s=sec%60;
+  if(hh) return hh+"時間"+(m?m+"分":"")+(s?s+"秒":"");
   return s ? m+"分"+s+"秒" : m+"分";
+}
+/* Long segments need the hour field; short ones stay as mm:ss. */
+function fmtClock(sec){
+  var hh=Math.floor(sec/3600);
+  var body=pad(Math.floor(sec%3600/60))+":"+pad(sec%60);
+  return hh ? hh+":"+body : body;
 }
 function today(){ var d=new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
 function now(){ var d=new Date(); return pad(d.getHours())+":"+pad(d.getMinutes()); }
@@ -601,6 +608,8 @@ function recordHTML(){
    + '<textarea id="md" placeholder="今日の心の状態…">'+esc(draft.mind)+'</textarea></div>';
   h+='<div class="sec"><div class="cue lbl">思考の調子</div>'
    + '<textarea id="th" placeholder="今日の思考の状態…">'+esc(draft.thought)+'</textarea></div>';
+  h+='<div class="sec"><div class="cue lbl">全体の感想</div>'
+   + '<textarea id="cm" placeholder="今日をふりかえって…">'+esc(draft.comment)+'</textarea></div>';
 
   h+='<div class="sec"><div class="cue lbl">手応え</div><div class="feelrow">'
    + '<input type="range" id="fe" min="0" max="100" step="5" value="'+draft.feel+'">'
@@ -631,6 +640,7 @@ function bindRecord(){
   document.getElementById("bd").oninput=function(){ draft.body=this.value; saveBtn.disabled=!hasContent(); saveDraft(); };
   document.getElementById("md").oninput=function(){ draft.mind=this.value; saveBtn.disabled=!hasContent(); saveDraft(); };
   document.getElementById("th").oninput=function(){ draft.thought=this.value; saveBtn.disabled=!hasContent(); saveDraft(); };
+  document.getElementById("cm").oninput=function(){ draft.comment=this.value; saveBtn.disabled=!hasContent(); saveDraft(); };
   var fe=document.getElementById("fe");
   fe.oninput=function(){ draft.feel=+this.value; document.getElementById("fv").innerHTML=this.value+"<span>%</span>"; saveDraft(); };
 
@@ -715,10 +725,9 @@ function reviewHTML(){
           h+='<div class="item'+(i.done?" d":"")+'"><span class="tick'+(i.done?" d":"")+'">✓</span>'+esc(i.name)+'</div>';
           if(i.note) h+='<div class="inote">↳ '+esc(i.note)+'</div>';
         });
-        [["body","体"],["mind","心"],["thought","思考"]].forEach(function(f){
+        [["body","体"],["mind","心"],["thought","思考"],["comment","全体"]].forEach(function(f){
           if(s[f[0]]) h+='<div class="cmt"><span class="badge">'+f[1]+'</span> '+esc(s[f[0]])+'</div>';
         });
-        if(s.comment) h+='<div class="cmt">'+esc(s.comment)+'</div>';
         h+='<div class="cedit"><button class="ghost sm" data-edit="'+s.id+'">この記録を編集</button></div>';
         h+='</div>';
       }
@@ -771,7 +780,7 @@ function reviewHTML(){
     return h;
   }
 
-  var fields=[["body","体"],["mind","心"],["thought","思考"],["comment",""]];
+  var fields=[["body","体"],["mind","心"],["thought","思考"],["comment","全体"]];
   var wc=sessions.filter(function(s){
     return fields.some(function(f){ return s[f[0]]; });
   });
@@ -895,11 +904,10 @@ function timerHTML(){
   }
   if(timerRunning){
     var cur=timerRunQueue[timerIndex];
-    var mm=pad(Math.floor(timerRemaining/60)), ss=pad(timerRemaining%60);
     var nx=timerRunQueue[timerIndex+1];
     var pct=cur.total>0 ? Math.round((1-timerRemaining/cur.total)*100) : 100;
     var h='<div class="tseg">'+esc(cur.name)+'</div>'
-     + '<div class="tcount">'+mm+':'+ss+'</div>'
+     + '<div class="tcount">'+fmtClock(timerRemaining)+'</div>'
      + '<div class="tbar"><div class="tbarfill" style="width:'+pct+'%"></div></div>'
      + '<div class="tnext">'+(nx?'次 → '+esc(nx.name)+'（'+fmtDur(nx.total)+'）'
        :(timerIndex+1)+' / '+timerRunQueue.length+'　最後のタイマー')+'</div>'
