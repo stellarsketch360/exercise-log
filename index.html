@@ -22,9 +22,10 @@
   .ico{background:none;border:1px solid var(--line);color:var(--dim);width:40px;height:40px;
     border-radius:10px;display:grid;place-items:center;cursor:pointer;}
   .ico:hover{border-color:var(--red);color:var(--red);}
-  .tabs{display:flex;gap:26px;border-bottom:1px solid var(--line);margin-bottom:24px;}
-  .tab{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
-    background:none;border:none;color:var(--dim);padding:0 0 12px;cursor:pointer;position:relative;}
+  .tabs{display:flex;gap:16px;border-bottom:1px solid var(--line);margin-bottom:24px;}
+  .tab{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+    background:none;border:none;color:var(--dim);padding:0 0 12px;cursor:pointer;position:relative;
+    white-space:nowrap;}
   .tab.on{color:var(--ink);}
   .tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--red);}
   .sec{margin-bottom:26px;}
@@ -146,6 +147,8 @@
     border-radius:9px;padding:11px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;cursor:pointer;}
   .ghost:hover{border-color:var(--red);color:var(--red);}
   .ghost.sm{margin-top:0;width:auto;padding:7px 14px;}
+  .ghost.next{margin-top:22px;border-color:var(--red);color:var(--red);}
+  .ghost.next:hover{background:var(--red);color:#fff;}
   .ghost.danger{margin-top:28px;color:var(--red);border-color:var(--line);}
   .ghost.danger:hover{background:var(--red);border-color:var(--red);color:#fff;}
   .cedit{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;text-align:right;}
@@ -184,9 +187,10 @@
     <button class="ico" id="gear" aria-label="設定">⚙</button>
   </div>
   <div class="tabs">
-    <button class="tab on" data-tab="record">記録</button>
+    <button class="tab on" data-tab="focus">1 意識</button>
+    <button class="tab" data-tab="timer">2 タイマー</button>
+    <button class="tab" data-tab="record">3 記録</button>
     <button class="tab" data-tab="review">まとめ</button>
-    <button class="tab" data-tab="timer">タイマー</button>
   </div>
   <div id="view"></div>
 </div>
@@ -255,7 +259,7 @@ if(exercises.map(function(e){ return e.id; }).join(",")==="e1,e2,e3,e4,e5") exer
 var presets=load("act:presets",DEF_PRE);
 var sessions=load("act:sessions",[]);
 var timers=normTimers(load("act:timers",DEF_TIMERS));
-var tab="record", sub="history", expanded=null, editingId=null;
+var tab="focus", sub="history", expanded=null, editingId=null, preEditDraft=null;
 var timerSel={}, timerRunning=false, timerPaused=false, timerIndex=-1,
     timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null, audioUnlocked=false,
     timerPrecounting=false, preCount=0, preCountHandle=null,
@@ -268,7 +272,7 @@ var ALARM_TYPES=[
 var alarmType=load("act:alarm","bell");
 /* Older builds stored alarm ids that no longer exist; fall back to the bell. */
 if(!ALARM_TYPES.some(function(a){ return a.id===alarmType; })) alarmType="bell";
-var draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",body:"",mind:"",thought:"",feel:50};
+var draft=restoreDraft();
 
 function persist(){
   save("act:exercises",exercises); save("act:presets",presets); save("act:sessions",sessions);
@@ -399,8 +403,8 @@ function resetAll(){
   stopSpeech();
   exercises=clone(DEF_EX); presets=clone(DEF_PRE); timers=clone(DEF_TIMERS);
   alarmType="bell"; save("act:alarm",alarmType);
-  timerSel={}; sessions=[]; expanded=null; editingId=null;
-  draft=blankDraft();
+  timerSel={}; sessions=[]; expanded=null; editingId=null; preEditDraft=null;
+  draft=blankDraft(); clearDraft();
   persist(); cloudDeleteAllSessions();
 }
 
@@ -412,6 +416,14 @@ var saveBtn=document.getElementById("saveBtn");
 function blankDraft(){
   return {date:today(),time:now(),done:{},notes:{},focus:[],comment:"",
     body:"",mind:"",thought:"",feel:50};
+}
+/* The flow spans three screens with a workout in between, so an unsaved
+   draft is kept on disk. Yesterday's leftovers are discarded. */
+function saveDraft(){ if(!editingId) save("act:draft",draft); }
+function clearDraft(){ save("act:draft",null); }
+function restoreDraft(){
+  var d=load("act:draft",null);
+  return (d && d.date===today()) ? d : blankDraft();
 }
 function findSession(id){
   var m=sessions.filter(function(s){ return s.id===id; });
@@ -431,6 +443,7 @@ function rowExercises(){
 function startEdit(id){
   var s=findSession(id);
   if(!s) return;
+  if(!editingId) preEditDraft=draft;   /* keep the in-progress entry for later */
   editingId=id;
   var done={}, notes={};
   s.items.forEach(function(i){ done[i.exId]=!!i.done; if(i.note) notes[i.exId]=i.note; });
@@ -442,7 +455,7 @@ function startEdit(id){
 }
 function cancelEdit(){
   var id=editingId;
-  editingId=null; draft=blankDraft();
+  editingId=null; draft=preEditDraft||blankDraft(); preEditDraft=null;
   tab="review"; sub="history"; expanded=id;   /* return to the card you came from */
   setTab(); render();
 }
@@ -450,7 +463,8 @@ function deleteEditing(){
   var id=editingId;
   if(!id || !confirm("この記録を削除する？元には戻せない。")) return;
   sessions=sessions.filter(function(s){ return s.id!==id; });
-  editingId=null; expanded=null; draft=blankDraft();
+  editingId=null; expanded=null;
+  draft=preEditDraft||blankDraft(); preEditDraft=null;
   persist(); cloudDeleteSession(id);
   tab="review"; sub="history"; setTab(); render();
   toast("記録を削除しました");
@@ -463,9 +477,11 @@ function hasContent(){
 
 function render(){
   savebar.style.display = tab==="record" ? "block" : "none";
-  document.getElementById("gear").style.visibility = (tab==="record"||tab==="timer") ? "visible" : "hidden";
-  view.innerHTML = tab==="record" ? recordHTML() : tab==="review" ? reviewHTML() : timerHTML();
-  if(tab==="record"){
+  document.getElementById("gear").style.visibility = tab==="review" ? "hidden" : "visible";
+  view.innerHTML = tab==="focus" ? focusHTML() : tab==="record" ? recordHTML()
+    : tab==="review" ? reviewHTML() : timerHTML();
+  if(tab==="focus") bindFocus();
+  else if(tab==="record"){
     bindRecord();
     saveBtn.textContent = editingId ? "記録を更新" : "記録を保存";
     /* An edit may legitimately clear every field, so allow saving an empty one. */
@@ -475,21 +491,16 @@ function render(){
   else bindTimer();
 }
 
-function recordHTML(){
-  var sorted=presets.slice().sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0); });
+function statusHTML(){
   var h="";
-  if(editingId) h+='<div class="editbar"><span>'+fmt(draft.date)+' の記録を編集中</span>'
-   + '<button class="fx" id="cancelEdit">やめる</button></div>';
   if(!canStore) h+='<div class="warn">このプレビューでは保存できません。HTMLファイルをブラウザで開けば記録は端末に保存されます。</div>';
   if(!fbReady) h+='<div class="warn">Firebase未設定：今はこの端末にのみ保存されています。設定すると全端末で同期されます。</div>';
   else h+='<div class="small"><span class="syncdot'+(synced?" on":"")+'"></span>'+(synced?"クラウドに同期済み":"同期中…")+'</div>';
-
-  h+='<div class="sec"><div class="cue lbl">日時</div><div class="row">'
-   + '<input type="date" id="d" value="'+draft.date+'">'
-   + '<input type="time" id="t" value="'+draft.time+'" style="max-width:130px">'
-   + '</div></div>';
-
-  h+='<div class="sec"><div class="cue lbl">今日意識すること</div><div class="spot">';
+  return h;
+}
+function focusEditorHTML(){
+  var sorted=presets.slice().sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0); });
+  var h='<div class="spot">';
   if(draft.focus.length){
     draft.focus.forEach(function(f){
       h+='<div class="fline"><div class="ftext">'+esc(f)+'</div>'
@@ -502,7 +513,39 @@ function recordHTML(){
     h+='<button class="chip'+(on?" on":"")+'" data-focus="'+esc(p.text)+'">'+(p.pinned?"★ ":"")+esc(p.text)+'</button>';
   });
   h+='</div><div class="addrow"><input type="text" id="nf" placeholder="新しく書く…">'
-   + '<button class="add" id="addF">＋ 追加</button></div></div></div>';
+   + '<button class="add" id="addF">＋ 追加</button></div></div>';
+  return h;
+}
+
+/* Step 1 — decide what to hold in mind today. */
+function focusHTML(){
+  return statusHTML()
+   + '<div class="sec"><div class="cue lbl">今日意識すること</div>'+focusEditorHTML()+'</div>'
+   + '<button class="ghost next" id="toTimer">タイマーへ →</button>';
+}
+
+/* Step 3 — record how it went. */
+function recordHTML(){
+  var h="";
+  if(editingId) h+='<div class="editbar"><span>'+fmt(draft.date)+' の記録を編集中</span>'
+   + '<button class="fx" id="cancelEdit">やめる</button></div>';
+
+  h+='<div class="sec"><div class="cue lbl">日時</div><div class="row">'
+   + '<input type="date" id="d" value="'+draft.date+'">'
+   + '<input type="time" id="t" value="'+draft.time+'" style="max-width:130px">'
+   + '</div></div>';
+
+  /* Editing an old record is self-contained, so the focus stays editable
+     there; in the normal flow it was already set in step 1. */
+  if(editingId){
+    h+='<div class="sec"><div class="cue lbl">今日意識すること</div>'+focusEditorHTML()+'</div>';
+  } else {
+    h+='<div class="sec"><div class="cue lbl">今日意識すること</div>';
+    if(draft.focus.length){
+      draft.focus.forEach(function(f){ h+='<div class="fline"><div class="ftext">'+esc(f)+'</div></div>'; });
+    } else h+='<div class="empty">まだ決めていない。</div>';
+    h+='<button class="ghost sm" id="backFocus">意識することを変える</button></div>';
+  }
 
   h+='<div class="sec"><div class="cue lbl">本日のメニュー</div><div class="ex">';
   rowExercises().forEach(function(e){
@@ -522,9 +565,6 @@ function recordHTML(){
   h+='<div class="sec"><div class="cue lbl">思考の調子</div>'
    + '<textarea id="th" placeholder="今日の思考の状態…">'+esc(draft.thought)+'</textarea></div>';
 
-  h+='<div class="sec"><div class="cue lbl">コメント</div>'
-   + '<textarea id="cm" placeholder="今日の訓練を振り返って…">'+esc(draft.comment)+'</textarea></div>';
-
   h+='<div class="sec"><div class="cue lbl">手応え</div><div class="feelrow">'
    + '<input type="range" id="fe" min="0" max="100" step="5" value="'+draft.feel+'">'
    + '<span class="feelval" id="fv">'+draft.feel+'<span>%</span></span></div></div>';
@@ -532,31 +572,41 @@ function recordHTML(){
   return h;
 }
 
-function bindRecord(){
-  document.getElementById("d").onchange=function(){ draft.date=this.value; };
-  document.getElementById("t").onchange=function(){ draft.time=this.value; };
-  document.getElementById("cm").oninput=function(){ draft.comment=this.value; saveBtn.disabled=!hasContent(); };
-  document.getElementById("bd").oninput=function(){ draft.body=this.value; saveBtn.disabled=!hasContent(); };
-  document.getElementById("md").oninput=function(){ draft.mind=this.value; saveBtn.disabled=!hasContent(); };
-  document.getElementById("th").oninput=function(){ draft.thought=this.value; saveBtn.disabled=!hasContent(); };
-  var fe=document.getElementById("fe");
-  fe.oninput=function(){ draft.feel=+this.value; document.getElementById("fv").innerHTML=this.value+"<span>%</span>"; };
-
-  [].forEach.call(view.querySelectorAll("[data-toggle]"),function(el){
-    el.onclick=function(){ var id=el.getAttribute("data-toggle");
-      draft.done[id]=!draft.done[id]; render(); };
-  });
-  [].forEach.call(view.querySelectorAll("[data-note]"),function(el){
-    el.oninput=function(){ draft.notes[el.getAttribute("data-note")]=el.value; };
-  });
+function bindFocusControls(){
   [].forEach.call(view.querySelectorAll("[data-focus]"),function(el){
     el.onclick=function(){ toggleFocus(el.getAttribute("data-focus")); };
   });
   [].forEach.call(view.querySelectorAll("[data-unfocus]"),function(el){
     el.onclick=function(){ toggleFocus(el.getAttribute("data-unfocus")); };
   });
-  document.getElementById("addF").onclick=addFocus;
-  document.getElementById("nf").onkeydown=function(e){ if(e.key==="Enter") addFocus(); };
+  var a=document.getElementById("addF");
+  if(a) a.onclick=addFocus;
+  var n=document.getElementById("nf");
+  if(n) n.onkeydown=function(e){ if(e.key==="Enter") addFocus(); };
+}
+function bindFocus(){
+  bindFocusControls();
+  document.getElementById("toTimer").onclick=function(){ tab="timer"; setTab(); render(); };
+}
+function bindRecord(){
+  document.getElementById("d").onchange=function(){ draft.date=this.value; saveDraft(); };
+  document.getElementById("t").onchange=function(){ draft.time=this.value; saveDraft(); };
+  document.getElementById("bd").oninput=function(){ draft.body=this.value; saveBtn.disabled=!hasContent(); saveDraft(); };
+  document.getElementById("md").oninput=function(){ draft.mind=this.value; saveBtn.disabled=!hasContent(); saveDraft(); };
+  document.getElementById("th").oninput=function(){ draft.thought=this.value; saveBtn.disabled=!hasContent(); saveDraft(); };
+  var fe=document.getElementById("fe");
+  fe.oninput=function(){ draft.feel=+this.value; document.getElementById("fv").innerHTML=this.value+"<span>%</span>"; saveDraft(); };
+
+  [].forEach.call(view.querySelectorAll("[data-toggle]"),function(el){
+    el.onclick=function(){ var id=el.getAttribute("data-toggle");
+      draft.done[id]=!draft.done[id]; saveDraft(); render(); };
+  });
+  [].forEach.call(view.querySelectorAll("[data-note]"),function(el){
+    el.oninput=function(){ draft.notes[el.getAttribute("data-note")]=el.value; saveDraft(); };
+  });
+  bindFocusControls();
+  var bf=document.getElementById("backFocus");
+  if(bf) bf.onclick=function(){ tab="focus"; setTab(); render(); };
   var ce=document.getElementById("cancelEdit");
   if(ce) ce.onclick=cancelEdit;
   var dr=document.getElementById("delRec");
@@ -566,7 +616,7 @@ function bindRecord(){
 function toggleFocus(t){
   var i=draft.focus.indexOf(t);
   if(i>=0) draft.focus.splice(i,1); else draft.focus.push(t);
-  render();
+  saveDraft(); render();
 }
 function addFocus(){
   var el=document.getElementById("nf"); var t=el.value.trim();
@@ -575,7 +625,7 @@ function addFocus(){
     presets.unshift({id:uid(),text:t,pinned:false}); persist();
   }
   if(draft.focus.indexOf(t)<0) draft.focus.push(t);
-  el.value=""; render();
+  el.value=""; saveDraft(); render();
 }
 
 saveBtn.onclick=function(){
@@ -593,15 +643,20 @@ saveBtn.onclick=function(){
   } else sessions.unshift(session);
   editingId=null;
   persist(); cloudSaveSession(session);
-  draft=blankDraft();
-  if(editing){ tab="review"; sub="history"; expanded=session.id; setTab(); }
+  if(editing){
+    draft=preEditDraft||blankDraft(); preEditDraft=null;
+    tab="review"; sub="history"; expanded=session.id; setTab();
+  } else {
+    draft=blankDraft(); clearDraft();
+    tab="review"; sub="history"; expanded=session.id; setTab();
+  }
   render(); toast(editing?"記録を更新しました":"記録を保存しました");
 };
 
 /* ---------- review ---------- */
 function reviewHTML(){
   var h='<div class="sub">';
-  [["history","履歴"],["stats","統計"],["effect","分析"],["comments","コメント"]].forEach(function(x){
+  [["history","履歴"],["stats","統計"],["effect","分析"],["comments","ふりかえり"]].forEach(function(x){
     h+='<button class="subbtn'+(sub===x[0]?" on":"")+'" data-sub="'+x[0]+'">'+x[1]+'</button>';
   });
   h+='</div>';
@@ -679,11 +734,18 @@ function reviewHTML(){
     return h;
   }
 
-  var wc=sessions.filter(function(s){ return s.comment; });
-  if(!wc.length) return h+'<div class="blank">振り返りのコメントがまだない。</div>';
+  var fields=[["body","体"],["mind","心"],["thought","思考"],["comment",""]];
+  var wc=sessions.filter(function(s){
+    return fields.some(function(f){ return s[f[0]]; });
+  });
+  if(!wc.length) return h+'<div class="blank">ふりかえりがまだない。</div>';
   wc.forEach(function(s){
-    h+='<div class="cmtcard"><div class="cmtdate">'+fmt(s.date)+' · '+s.time+'</div>'
-     + '<div class="cmttext">'+esc(s.comment)+'</div></div>';
+    h+='<div class="cmtcard"><div class="cmtdate">'+fmt(s.date)+' · '+s.time+'</div>';
+    fields.forEach(function(f){
+      if(!s[f[0]]) return;
+      h+='<div class="cmttext">'+(f[1]?'<span class="badge">'+f[1]+'</span> ':'')+esc(s[f[0]])+'</div>';
+    });
+    h+='</div>';
   });
   return h;
 }
@@ -822,6 +884,7 @@ function timerHTML(){
     .reduce(function(a,t){ return a+t.sec; },0);
   h+='<div class="tsum">合計 '+fmtDur(total)+'</div>';
   h+='<button class="save" id="tstart"'+(total===0?" disabled":"")+'>スタート</button>';
+  h+='<button class="ghost next" id="toRecord">記録へ →</button>';
   return h;
 }
 
@@ -842,6 +905,8 @@ function bindTimer(){
   });
   var startBtn=document.getElementById("tstart");
   if(startBtn) startBtn.onclick=startTimer;
+  var tr=document.getElementById("toRecord");
+  if(tr) tr.onclick=function(){ tab="record"; setTab(); render(); };
 }
 
 function startTimer(){
@@ -1035,7 +1100,8 @@ function openSheet(){
   document.getElementById("demo").onclick=function(){
     if(confirm("約4か月ぶんの記録をランダムに作る？（今の記録は消して入れ替えます）")){
       var s=sample();
-      sessions=s; editingId=null; expanded=null; draft=blankDraft();
+      sessions=s; editingId=null; expanded=null; preEditDraft=null;
+      draft=blankDraft(); clearDraft();
       save("act:sessions",sessions);
       cloudDeleteAllSessions(); cloudAddSessions(s);
       close(); tab="review"; sub="history"; setTab(); render();
@@ -1051,7 +1117,8 @@ function openSheet(){
   };
   document.getElementById("wipe").onclick=function(){
     if(confirm("記録をすべて消去する？元には戻せない。")){
-      sessions=[]; editingId=null; expanded=null; draft=blankDraft();
+      sessions=[]; editingId=null; expanded=null; preEditDraft=null;
+      draft=blankDraft(); clearDraft();
       persist(); cloudDeleteAllSessions();
       close(); render(); toast("記録を消去しました");
     }
