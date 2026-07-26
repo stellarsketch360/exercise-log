@@ -146,6 +146,8 @@
     border-radius:9px;padding:11px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;cursor:pointer;}
   .ghost:hover{border-color:var(--red);color:var(--red);}
   .ghost.sm{margin-top:0;width:auto;padding:7px 14px;}
+  .ghost.danger{margin-top:28px;color:var(--red);border-color:var(--line);}
+  .ghost.danger:hover{background:var(--red);border-color:var(--red);color:#fff;}
   .cedit{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;text-align:right;}
   .editbar{display:flex;align-items:center;justify-content:space-between;gap:10px;
     background:var(--card);border:1px solid var(--red);border-radius:9px;padding:10px 12px;
@@ -274,6 +276,7 @@ function persist(){
   if(uidRef) db.collection("users").doc(uidRef).set({exercises:exercises,presets:presets,timers:timers},{merge:true});
 }
 function cloudSaveSession(s){ if(uidRef) db.collection("users").doc(uidRef).collection("sessions").doc(s.id).set(s); }
+function cloudDeleteSession(id){ if(uidRef) db.collection("users").doc(uidRef).collection("sessions").doc(id).delete(); }
 function cloudDeleteAllSessions(){
   if(!uidRef) return;
   var col=db.collection("users").doc(uidRef).collection("sessions");
@@ -443,6 +446,15 @@ function cancelEdit(){
   tab="review"; sub="history"; expanded=id;   /* return to the card you came from */
   setTab(); render();
 }
+function deleteEditing(){
+  var id=editingId;
+  if(!id || !confirm("この記録を削除する？元には戻せない。")) return;
+  sessions=sessions.filter(function(s){ return s.id!==id; });
+  editingId=null; expanded=null; draft=blankDraft();
+  persist(); cloudDeleteSession(id);
+  tab="review"; sub="history"; setTab(); render();
+  toast("記録を削除しました");
+}
 function hasContent(){
   var any=false; for(var k in draft.done){ if(draft.done[k]) any=true; }
   return any || draft.focus.length>0 || draft.comment.trim()!==""
@@ -516,6 +528,7 @@ function recordHTML(){
   h+='<div class="sec"><div class="cue lbl">手応え</div><div class="feelrow">'
    + '<input type="range" id="fe" min="0" max="100" step="5" value="'+draft.feel+'">'
    + '<span class="feelval" id="fv">'+draft.feel+'<span>%</span></span></div></div>';
+  if(editingId) h+='<button class="ghost danger" id="delRec">この記録を削除</button>';
   return h;
 }
 
@@ -546,6 +559,8 @@ function bindRecord(){
   document.getElementById("nf").onkeydown=function(e){ if(e.key==="Enter") addFocus(); };
   var ce=document.getElementById("cancelEdit");
   if(ce) ce.onclick=cancelEdit;
+  var dr=document.getElementById("delRec");
+  if(dr) dr.onclick=deleteEditing;
 }
 
 function toggleFocus(t){
