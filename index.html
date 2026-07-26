@@ -145,6 +145,11 @@
   .ghost{margin-top:10px;width:100%;background:none;border:1px solid var(--line);color:var(--dim);
     border-radius:9px;padding:11px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;cursor:pointer;}
   .ghost:hover{border-color:var(--red);color:var(--red);}
+  .ghost.sm{margin-top:0;width:auto;padding:7px 14px;}
+  .cedit{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;text-align:right;}
+  .editbar{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:var(--card);border:1px solid var(--red);border-radius:9px;padding:10px 12px;
+    margin-bottom:18px;font-family:var(--mono);font-size:11px;color:var(--red);}
   .toast{position:fixed;bottom:92px;left:50%;transform:translateX(-50%);background:var(--red);color:#fff;
     font-family:var(--mono);font-size:12px;padding:10px 18px;border-radius:99px;z-index:60;
     box-shadow:0 4px 14px rgba(43,38,34,.2);}
@@ -248,7 +253,7 @@ if(exercises.map(function(e){ return e.id; }).join(",")==="e1,e2,e3,e4,e5") exer
 var presets=load("act:presets",DEF_PRE);
 var sessions=load("act:sessions",[]);
 var timers=normTimers(load("act:timers",DEF_TIMERS));
-var tab="record", sub="history", expanded=null;
+var tab="record", sub="history", expanded=null, editingId=null;
 var timerSel={}, timerRunning=false, timerPaused=false, timerIndex=-1,
     timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null, audioUnlocked=false,
     timerPrecounting=false, preCount=0, preCountHandle=null,
@@ -391,8 +396,8 @@ function resetAll(){
   stopSpeech();
   exercises=clone(DEF_EX); presets=clone(DEF_PRE); timers=clone(DEF_TIMERS);
   alarmType="bell"; save("act:alarm",alarmType);
-  timerSel={}; sessions=[]; expanded=null;
-  draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",body:"",mind:"",thought:"",feel:50};
+  timerSel={}; sessions=[]; expanded=null; editingId=null;
+  draft=blankDraft();
   persist(); cloudDeleteAllSessions();
 }
 
@@ -401,6 +406,43 @@ var view=document.getElementById("view");
 var savebar=document.getElementById("savebar");
 var saveBtn=document.getElementById("saveBtn");
 
+function blankDraft(){
+  return {date:today(),time:now(),done:{},notes:{},focus:[],comment:"",
+    body:"",mind:"",thought:"",feel:50};
+}
+function findSession(id){
+  var m=sessions.filter(function(s){ return s.id===id; });
+  return m.length?m[0]:null;
+}
+/* An old record can reference an exercise since removed from the menu. Keep
+   those rows while editing so saving does not silently drop them. */
+function rowExercises(){
+  var s=editingId?findSession(editingId):null;
+  if(!s) return exercises;
+  var list=exercises.slice();
+  s.items.forEach(function(i){
+    if(!list.some(function(e){ return e.id===i.exId; })) list.push({id:i.exId,name:i.name});
+  });
+  return list;
+}
+function startEdit(id){
+  var s=findSession(id);
+  if(!s) return;
+  editingId=id;
+  var done={}, notes={};
+  s.items.forEach(function(i){ done[i.exId]=!!i.done; if(i.note) notes[i.exId]=i.note; });
+  draft={date:s.date,time:s.time,done:done,notes:notes,focus:(s.focus||[]).slice(),
+    comment:s.comment||"",body:s.body||"",mind:s.mind||"",thought:s.thought||"",
+    feel:typeof s.feel==="number"?s.feel:50};
+  expanded=null; tab="record"; setTab(); render();
+  window.scrollTo(0,0);
+}
+function cancelEdit(){
+  var id=editingId;
+  editingId=null; draft=blankDraft();
+  tab="review"; sub="history"; expanded=id;   /* return to the card you came from */
+  setTab(); render();
+}
 function hasContent(){
   var any=false; for(var k in draft.done){ if(draft.done[k]) any=true; }
   return any || draft.focus.length>0 || draft.comment.trim()!==""
@@ -411,7 +453,12 @@ function render(){
   savebar.style.display = tab==="record" ? "block" : "none";
   document.getElementById("gear").style.visibility = (tab==="record"||tab==="timer") ? "visible" : "hidden";
   view.innerHTML = tab==="record" ? recordHTML() : tab==="review" ? reviewHTML() : timerHTML();
-  if(tab==="record"){ bindRecord(); saveBtn.disabled=!hasContent(); }
+  if(tab==="record"){
+    bindRecord();
+    saveBtn.textContent = editingId ? "記録を更新" : "記録を保存";
+    /* An edit may legitimately clear every field, so allow saving an empty one. */
+    saveBtn.disabled = editingId ? false : !hasContent();
+  }
   else if(tab==="review") bindReview();
   else bindTimer();
 }
@@ -419,6 +466,8 @@ function render(){
 function recordHTML(){
   var sorted=presets.slice().sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0); });
   var h="";
+  if(editingId) h+='<div class="editbar"><span>'+fmt(draft.date)+' の記録を編集中</span>'
+   + '<button class="fx" id="cancelEdit">やめる</button></div>';
   if(!canStore) h+='<div class="warn">このプレビューでは保存できません。HTMLファイルをブラウザで開けば記録は端末に保存されます。</div>';
   if(!fbReady) h+='<div class="warn">Firebase未設定：今はこの端末にのみ保存されています。設定すると全端末で同期されます。</div>';
   else h+='<div class="small"><span class="syncdot'+(synced?" on":"")+'"></span>'+(synced?"クラウドに同期済み":"同期中…")+'</div>';
@@ -444,7 +493,7 @@ function recordHTML(){
    + '<button class="add" id="addF">＋ 追加</button></div></div></div>';
 
   h+='<div class="sec"><div class="cue lbl">本日のメニュー</div><div class="ex">';
-  exercises.forEach(function(e){
+  rowExercises().forEach(function(e){
     var on=!!draft.done[e.id];
     h+='<div class="exrow'+(on?" done":"")+'">'
      + '<div class="exhead" data-toggle="'+e.id+'"><div class="box'+(on?" on":"")+'">✓</div>'
@@ -495,6 +544,8 @@ function bindRecord(){
   });
   document.getElementById("addF").onclick=addFocus;
   document.getElementById("nf").onkeydown=function(e){ if(e.key==="Enter") addFocus(); };
+  var ce=document.getElementById("cancelEdit");
+  if(ce) ce.onclick=cancelEdit;
 }
 
 function toggleFocus(t){
@@ -513,16 +564,23 @@ function addFocus(){
 }
 
 saveBtn.onclick=function(){
-  var items=exercises.map(function(e){
+  var items=rowExercises().map(function(e){
     return {exId:e.id,name:e.name,done:!!draft.done[e.id],note:(draft.notes[e.id]||"").trim()};
   });
-  var session={id:uid(),date:draft.date,time:draft.time,items:items,
+  var editing=!!editingId;
+  var session={id:editingId||uid(),date:draft.date,time:draft.time,items:items,
     focus:draft.focus.slice(),comment:draft.comment.trim(),
     body:draft.body.trim(),mind:draft.mind.trim(),thought:draft.thought.trim(),feel:draft.feel};
-  sessions.unshift(session);
+  if(editing){
+    /* The date may have moved, so restore newest-first order. */
+    sessions=sessions.map(function(s){ return s.id===session.id?session:s; })
+      .sort(function(a,b){ if(a.date!==b.date) return a.date<b.date?1:-1; return a.time<b.time?1:-1; });
+  } else sessions.unshift(session);
+  editingId=null;
   persist(); cloudSaveSession(session);
-  draft={date:today(),time:now(),done:{},notes:{},focus:[],comment:"",body:"",mind:"",thought:"",feel:50};
-  render(); toast("記録を保存しました");
+  draft=blankDraft();
+  if(editing){ tab="review"; sub="history"; expanded=session.id; setTab(); }
+  render(); toast(editing?"記録を更新しました":"記録を保存しました");
 };
 
 /* ---------- review ---------- */
@@ -554,6 +612,7 @@ function reviewHTML(){
           if(s[f[0]]) h+='<div class="cmt"><span class="badge">'+f[1]+'</span> '+esc(s[f[0]])+'</div>';
         });
         if(s.comment) h+='<div class="cmt">'+esc(s.comment)+'</div>';
+        h+='<div class="cedit"><button class="ghost sm" data-edit="'+s.id+'">この記録を編集</button></div>';
         h+='</div>';
       }
       h+='</div>';
@@ -621,6 +680,9 @@ function bindReview(){
   [].forEach.call(view.querySelectorAll("[data-exp]"),function(el){
     el.onclick=function(){ var id=el.getAttribute("data-exp");
       expanded = expanded===id ? null : id; render(); };
+  });
+  [].forEach.call(view.querySelectorAll("[data-edit]"),function(el){
+    el.onclick=function(e){ e.stopPropagation(); startEdit(el.getAttribute("data-edit")); };
   });
 }
 
@@ -958,7 +1020,8 @@ function openSheet(){
   document.getElementById("demo").onclick=function(){
     if(confirm("約4か月ぶんの記録をランダムに作る？（今の記録は消して入れ替えます）")){
       var s=sample();
-      sessions=s; save("act:sessions",sessions);
+      sessions=s; editingId=null; expanded=null; draft=blankDraft();
+      save("act:sessions",sessions);
       cloudDeleteAllSessions(); cloudAddSessions(s);
       close(); tab="review"; sub="history"; setTab(); render();
       toast(s.length+"件の記録を入れました");
@@ -973,7 +1036,8 @@ function openSheet(){
   };
   document.getElementById("wipe").onclick=function(){
     if(confirm("記録をすべて消去する？元には戻せない。")){
-      sessions=[]; persist(); cloudDeleteAllSessions();
+      sessions=[]; editingId=null; expanded=null; draft=blankDraft();
+      persist(); cloudDeleteAllSessions();
       close(); render(); toast("記録を消去しました");
     }
   };
