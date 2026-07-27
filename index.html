@@ -188,7 +188,10 @@
     box-shadow:0 4px 14px rgba(43,38,34,.2);}
   .warn{background:#FBF3E7;border:1px solid #E8D6B8;color:#7A5B22;border-radius:9px;padding:10px 12px;
     font-size:12px;line-height:1.6;margin-bottom:18px;font-family:var(--mono);}
-  .syncdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dim);margin-right:6px;}
+  .acct{display:flex;align-items:center;font-family:var(--mono);font-size:12px;color:var(--ink);
+    background:var(--house);border:1px solid var(--line);border-radius:9px;padding:11px 12px;
+    margin-bottom:8px;word-break:break-all;}
+  .syncdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dim);margin-right:6px;flex:0 0 auto;}
   .syncdot.on{background:#3f8a52;}
   .tsum{font-family:var(--mono);font-size:11px;color:var(--dim);margin:14px 0 4px;text-align:right;}
   .tseg{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);
@@ -246,6 +249,7 @@ var firebaseConfig = {
 };
 var fbReady = firebaseConfig.apiKey.indexOf("YOUR_") !== 0;
 var db=null, uidRef=null, synced=false, syncError="";
+var authUser=null, authBusy=false, authError="", unsubs=[], pendingCarry=null, syncPrimed=false, signingOut=false;
 
 /* ---------- storage (localStorage + memory fallback, used as offline cache) ---------- */
 var mem={}, canStore=true;
@@ -340,7 +344,9 @@ function persist(){
 }
 function flushCloud(){
   clearTimeout(cloudHandle); cloudHandle=null;
-  if(uidRef) db.collection("users").doc(uidRef).set({sets:sets,presets:presets},{merge:true});
+  /* Never before the first snapshot: right after a sign-in the local copy is
+     still the old account's and would overwrite the one being joined. */
+  if(uidRef && syncPrimed) db.collection("users").doc(uidRef).set({sets:sets,presets:presets},{merge:true});
 }
 function cloudSaveSession(s){ if(uidRef) db.collection("users").doc(uidRef).collection("sessions").doc(s.id).set(s); }
 function cloudDeleteSession(id){ if(uidRef) db.collection("users").doc(uidRef).collection("sessions").doc(id).delete(); }
@@ -390,16 +396,29 @@ function syncFailed(e){
     : "同期に失敗しました。"+(c?"（"+c+"）":"");
   render();
 }
+/* Signing in swaps one account for another, so the previous account's
+   listeners have to be dropped or both would write into the view. */
+function stopSync(){
+  unsubs.forEach(function(f){ try{ f(); }catch(e){} });
+  unsubs=[];
+}
 function startSync(u){
-  uidRef=u;
+  if(uidRef===u) return;
+  stopSync();
+  uidRef=u; syncPrimed=false; synced=false; syncError="";
   var userDoc=db.collection("users").doc(u);
   userDoc.get().then(function(snap){
     if(!snap.exists){
+      /* A brand new account (first launch, or a first sign-in that made one)
+         starts as a copy of whatever this device already had. */
       userDoc.set({sets:sets,presets:presets});
       if(sessions.length) cloudAddSessions(sessions);
     }
+    if(pendingCarry && pendingCarry.length){ cloudAddSessions(pendingCarry); }
+    pendingCarry=null;
   }).catch(syncFailed);
-  userDoc.onSnapshot(function(snap){
+  unsubs.push(userDoc.onSnapshot(function(snap){
+    syncPrimed=true;
     if(!snap.exists) return;
     var d=snap.data();
     /* d.items is the flat list older builds wrote, d.timers the one before
@@ -417,8 +436,8 @@ function startSync(u){
     if(!setById(openSetId)) openSetId = activeSetId;
     save("act:sets",sets); save("act:presets",presets); save("act:activeSet",activeSetId);
     if(changed) render();
-  },syncFailed);
-  userDoc.collection("sessions").onSnapshot(function(qs){
+  },syncFailed));
+  unsubs.push(userDoc.collection("sessions").onSnapshot(function(qs){
     var list=[];
     qs.forEach(function(doc){ list.push(doc.data()); });
     list.sort(function(a,b){
@@ -429,13 +448,103 @@ function startSync(u){
     sessions=list; save("act:sessions",sessions);
     synced=true; syncError="";
     if(changed) render();
-  },syncFailed);
+  },syncFailed));
 }
+
+/* ---------- google sign-in (optional) ----------
+   The app runs on an anonymous account from the first launch and never asks
+   anyone to sign in. Signing in only *links* Google to that same anonymous
+   account, so the uid — and with it every record — is untouched; what it buys
+   is a way back in if this browser ever loses its storage. */
+function googleProvider(){
+  var p=new firebase.auth.GoogleAuthProvider();
+  p.setCustomParameters({prompt:"select_account"});
+  return p;
+}
+function authName(){
+  return (authUser && !authUser.isAnonymous) ? (authUser.email||authUser.displayName||"Googleアカウント") : "";
+}
+function credFromError(e){
+  if(e && e.credential) return e.credential;
+  try{ return firebase.auth.GoogleAuthProvider.credentialFromError(e); }catch(err){ return null; }
+}
+function authDone(msg){
+  authBusy=false; authError="";
+  if(msg) toast(msg);
+  render(); if(modal && modal.innerHTML) openSheet();
+}
+function authFailed(e){
+  authBusy=false;
+  var c=(e&&e.code)||"";
+  authError = c.indexOf("popup-closed")>=0 || c.indexOf("cancelled-popup")>=0 ? ""
+    : c.indexOf("operation-not-allowed")>=0 ? "FirebaseでGoogleログインが有効になっていません。"
+    : c.indexOf("unauthorized-domain")>=0 ? "このドメインがFirebaseで許可されていません。"
+    : "ログインできませんでした。"+(c?"（"+c+"）":"");
+  render(); if(modal && modal.innerHTML) openSheet();
+}
+/* The Google account is already in use, i.e. it was signed into on another
+   device. That account's records are the real ones; this device's anonymous
+   pile is offered as something to carry across rather than silently dropped. */
+function adoptExisting(e){
+  var cred=credFromError(e);
+  if(!cred) return authFailed(e);
+  if(sessions.length && confirm("このGoogleアカウントには既に記録があります。\nこの端末の記録"+sessions.length+"件も持っていく？"))
+    pendingCarry=sessions.slice();
+  firebase.auth().signInWithCredential(cred)
+    .then(function(){ authDone("ログインしました"); })
+    .catch(authFailed);
+}
+function signInGoogle(){
+  var u=firebase.auth().currentUser;
+  if(!u || authBusy) return;
+  authBusy=true; authError=""; openSheet();
+  u.linkWithPopup(googleProvider())
+    .then(function(){ authDone("Googleアカウントと繋がりました"); })
+    .catch(function(e){
+      var c=(e&&e.code)||"";
+      if(c.indexOf("credential-already-in-use")>=0) return adoptExisting(e);
+      /* Some browsers refuse popups outright; the redirect flow is the
+         fallback and comes back through getRedirectResult on the next load. */
+      if(c.indexOf("popup-blocked")>=0 || c.indexOf("operation-not-supported")>=0){
+        u.linkWithRedirect(googleProvider()).catch(authFailed);
+        return;
+      }
+      authFailed(e);
+    });
+}
+function signOutGoogle(){
+  if(!confirm("ログアウトする？\nこの端末の表示は空になるが、記録はGoogleアカウントに残っていて、次にログインすれば戻る。")) return;
+  authBusy=true; signingOut=true; openSheet();
+  firebase.auth().signOut().then(function(){
+    /* Leave nothing behind locally, or the next anonymous account would be
+       created as a copy of the account just left. Wiping has to finish before
+       the replacement account exists, hence signingOut holding off the
+       automatic one in onAuthStateChanged. */
+    stopSync(); uidRef=null; synced=false;
+    resetAll(); editingId=null; expanded=null;
+    signingOut=false;
+    return firebase.auth().signInAnonymously();
+  }).then(function(){ authDone("ログアウトしました"); })
+    .catch(function(e){ signingOut=false; authFailed(e); });
+}
+
 if(fbReady){
   firebase.initializeApp(firebaseConfig);
   db=firebase.firestore();
   firebase.auth().onAuthStateChanged(function(user){
+    authUser=user;
     if(user) startSync(user.uid);
+    /* Signing out drops straight back to an anonymous account so the app
+       keeps working without anybody logging in. */
+    else if(!signingOut) firebase.auth().signInAnonymously().catch(syncFailed);
+    render(); if(modal && modal.innerHTML) openSheet();
+  });
+  firebase.auth().getRedirectResult().then(function(r){
+    if(r && r.user) toast("Googleアカウントと繋がりました");
+  }).catch(function(e){
+    var c=(e&&e.code)||"";
+    if(c.indexOf("credential-already-in-use")>=0) return adoptExisting(e);
+    if(c) authFailed(e);
   });
   firebase.auth().signInAnonymously().catch(syncFailed);
 }
@@ -1358,6 +1467,22 @@ function openSheet(){
   });
   h+='</div>';
 
+  if(fbReady){
+    h+='<div class="cue" style="margin-top:24px">アカウント</div>';
+    if(authError) h+='<div class="warn">'+esc(authError)+'</div>';
+    if(authName()){
+      h+='<div class="acct"><span class="syncdot on"></span>'+esc(authName())+'</div>'
+       + '<div class="small">この記録はGoogleアカウントに紐づいています。別の端末でも同じアカウントでログインすれば開けます。</div>'
+       + '<button class="ghost" id="signout"'+(authBusy?" disabled":"")+'>ログアウト</button>';
+    } else {
+      h+='<div class="small">今はこの端末にだけ紐づいています。'
+       + 'Safariのデータを消すと記録に辿り着けなくなります。<br>'
+       + 'ログインしなくてもこのまま使えます。</div>'
+       + '<button class="ghost" id="signin"'+(authBusy?" disabled":"")+'>'
+       + (authBusy?"接続中…":"Googleでログイン")+'</button>';
+    }
+  }
+
   h+='<div class="cue" style="margin-top:24px">データ</div>'
    + '<button class="ghost" id="demo">使い込んだふうにする（テスト用）</button>'
    + '<button class="ghost" id="reset">全てデフォルトに戻す（テスト用）</button>'
@@ -1367,6 +1492,10 @@ function openSheet(){
 
   document.getElementById("scrim").onclick=function(e){ if(e.target.id==="scrim") close(); };
   document.getElementById("close").onclick=close;
+  var si=document.getElementById("signin");
+  if(si) si.onclick=signInGoogle;
+  var so=document.getElementById("signout");
+  if(so) so.onclick=signOutGoogle;
 
   [].forEach.call(modal.querySelectorAll("[data-pin]"),function(el){
     el.onclick=function(){ var id=el.getAttribute("data-pin");
