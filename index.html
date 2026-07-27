@@ -22,6 +22,8 @@
   .ico{background:none;border:1px solid var(--line);color:var(--dim);width:40px;height:40px;
     border-radius:10px;display:grid;place-items:center;cursor:pointer;}
   .ico:hover{border-color:var(--red);color:var(--red);}
+  .ico.dots{border-radius:50%;gap:5px;grid-auto-flow:column;}
+  .ico.dots i{width:4px;height:4px;border-radius:50%;background:currentColor;}
   .tabs{display:flex;gap:16px;border-bottom:1px solid var(--line);margin-bottom:24px;}
   .tab{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;
     background:none;border:none;color:var(--dim);padding:0 0 12px;cursor:pointer;position:relative;
@@ -188,7 +190,7 @@
     <div>
       <h1>エクササイズ</h1>
     </div>
-    <button class="ico" id="gear" aria-label="設定">⚙</button>
+    <button class="ico dots" id="gear" aria-label="設定"><i></i><i></i><i></i></button>
   </div>
   <div class="tabs">
     <button class="tab on" data-tab="focus">1 意識</button>
