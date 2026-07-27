@@ -145,9 +145,31 @@
     border-radius:9px;padding:11px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;cursor:pointer;}
   .ghost:hover{border-color:var(--red);color:var(--red);}
   .ghost.sm{margin-top:0;width:auto;padding:7px 14px;}
+  .setcard{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--card);
+    overflow:hidden;transition:border-color .2s;}
+  .setcard.on{border-color:var(--red);}
+  .sethead{display:flex;align-items:center;gap:11px;padding:15px 16px;cursor:pointer;}
+  .setchev{flex:0 0 auto;width:8px;height:8px;border-right:1.5px solid var(--dim);
+    border-bottom:1.5px solid var(--dim);transform:rotate(-45deg);margin-left:2px;
+    transition:transform .28s ease;}
+  .setcard.open .setchev{transform:rotate(45deg);}
+  .setcard.on .setchev{border-color:var(--red);}
+  .setname{flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .setcard.on .setname{color:var(--red);}
+  .setmeta{flex:0 0 auto;font-family:var(--mono);font-size:11px;color:var(--dim);}
+  /* Kept in the DOM while folded so unfolding can animate. */
+  .setbody{display:grid;grid-template-rows:0fr;transition:grid-template-rows .28s ease;}
+  .setcard.open .setbody{grid-template-rows:1fr;}
+  .setinner{overflow:hidden;min-height:0;}
+  .setpad{padding:0 14px 16px;}
+  .setrename{margin-bottom:12px;}
+  .setcard input.setrename{width:100%;font-size:13px;}
+  .setdel{width:100%;margin-top:14px;}
   .edrow{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--house);}
+  .edrow.off{opacity:.5;}
+  .edtop{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
   /* input[type=…] outranks a bare class, so these have to be as specific. */
-  .edrow input.edname{width:100%;margin-bottom:8px;}
+  .edrow input.edname{width:100%;min-width:0;flex:1;}
   .edtime{display:flex;align-items:center;gap:5px;}
   .edtime span{font-family:var(--mono);font-size:11px;color:var(--dim);flex:0 0 auto;}
   .edrow input.ednum{width:58px;min-width:0;flex:0 0 auto;text-align:center;padding:9px 4px;}
@@ -269,14 +291,29 @@ function loadItems(){
   });
   return out;
 }
+function normSets(list){
+  return (list||[]).map(function(s){
+    return {id:s.id||uid(),name:s.name||"セット",items:normItems(s.items)};
+  });
+}
+/* There used to be a single list of items. It becomes セット1 so that nothing
+   is lost when sets arrive. */
+function loadSets(){
+  var saved=load("act:sets",null);
+  if(saved) return normSets(saved);
+  return [{id:"set1",name:"セット1",items:loadItems()}];
+}
 
 /* ---------- state ---------- */
-var items=loadItems();
+var sets=loadSets();
 var presets=load("act:presets",DEF_PRE);
 var sessions=load("act:sessions",[]);
 var sel=load("act:sel",{});
+/* Which set today is being run from, and which one is unfolded on screen. */
+var activeSetId=load("act:activeSet",null);
+if(!setById(activeSetId)) activeSetId = sets.length ? sets[0].id : null;
+var openSetId=activeSetId;
 var tab="focus", sub="history", expanded=null, editingId=null, preEditDraft=null;
-var timerEditing=false;
 var timerRunning=false, timerPaused=false, timerIndex=-1,
     timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null, audioUnlocked=false,
     timerPrecounting=false, preCount=0, preCountHandle=null,
@@ -295,15 +332,15 @@ var cloudHandle=null;
 /* Local save is immediate; the cloud write waits so that typing a name does
    not fire one request per keystroke. */
 function persist(){
-  save("act:items",items); save("act:presets",presets); save("act:sessions",sessions);
-  save("act:sel",sel);
+  save("act:sets",sets); save("act:presets",presets); save("act:sessions",sessions);
+  save("act:sel",sel); save("act:activeSet",activeSetId);
   if(!uidRef) return;
   clearTimeout(cloudHandle);
   cloudHandle=setTimeout(flushCloud,500);
 }
 function flushCloud(){
   clearTimeout(cloudHandle); cloudHandle=null;
-  if(uidRef) db.collection("users").doc(uidRef).set({items:items,presets:presets},{merge:true});
+  if(uidRef) db.collection("users").doc(uidRef).set({sets:sets,presets:presets},{merge:true});
 }
 function cloudSaveSession(s){ if(uidRef) db.collection("users").doc(uidRef).collection("sessions").doc(s.id).set(s); }
 function cloudDeleteSession(id){ if(uidRef) db.collection("users").doc(uidRef).collection("sessions").doc(id).delete(); }
@@ -358,22 +395,27 @@ function startSync(u){
   var userDoc=db.collection("users").doc(u);
   userDoc.get().then(function(snap){
     if(!snap.exists){
-      userDoc.set({items:items,presets:presets});
+      userDoc.set({sets:sets,presets:presets});
       if(sessions.length) cloudAddSessions(sessions);
     }
   }).catch(syncFailed);
   userDoc.onSnapshot(function(snap){
     if(!snap.exists) return;
     var d=snap.data();
-    /* d.timers is what older builds wrote before the two lists merged. */
-    var nextItems = d.items ? normItems(d.items) : (d.timers ? normItems(d.timers) : items);
+    /* d.items is the flat list older builds wrote, d.timers the one before
+       that; either becomes a single set. */
+    var nextSets = d.sets ? normSets(d.sets)
+      : (d.items || d.timers) ? [{id:"set1",name:"セット1",items:normItems(d.items||d.timers)}]
+      : sets;
     var nextPresets = d.presets || presets;
     /* Our own writes echo back here. Re-rendering on those would rebuild the
        view under the user and drop the caret mid-edit. */
-    var changed = JSON.stringify(nextItems)!==JSON.stringify(items)
+    var changed = JSON.stringify(nextSets)!==JSON.stringify(sets)
       || JSON.stringify(nextPresets)!==JSON.stringify(presets);
-    items=nextItems; presets=nextPresets;
-    save("act:items",items); save("act:presets",presets);
+    sets=nextSets; presets=nextPresets;
+    if(!setById(activeSetId)) activeSetId = sets.length ? sets[0].id : null;
+    if(!setById(openSetId)) openSetId = activeSetId;
+    save("act:sets",sets); save("act:presets",presets); save("act:activeSet",activeSetId);
     if(changed) render();
   },syncFailed);
   userDoc.collection("sessions").onSnapshot(function(qs){
@@ -421,7 +463,9 @@ function sample(days){
   for(var b=n;b>=0;b--){
     if(!chance(0.6)) continue;               /* rest days leave natural gaps */
     var d=new Date(base); d.setDate(d.getDate()-b);
-    var recItems=items.map(function(e){
+    /* Each day is run from one set, so pick one and record just its items. */
+    var src=sets.length?sets[Math.floor(Math.random()*sets.length)]:null;
+    var recItems=(src?src.items:[]).map(function(e){
       return {exId:e.id,name:e.name,done:chance(0.78)};
     });
     if(recItems.length && !recItems.some(function(i){ return i.done; })) recItems[0].done=true;
@@ -451,7 +495,9 @@ function resetAll(){
   timerRunning=false; timerPaused=false; timerPrecounting=false;
   timerIndex=-1; timerRunQueue=[];
   stopSpeech();
-  items=clone(DEF_ITEMS); presets=clone(DEF_PRE); sel={};
+  sets=[{id:"set1",name:"セット1",items:clone(DEF_ITEMS)}];
+  activeSetId=sets[0].id; openSetId=activeSetId;
+  presets=clone(DEF_PRE); sel={};
   alarmType="bell"; save("act:alarm",alarmType);
   sessions=[]; expanded=null; editingId=null; preEditDraft=null;
   draft=blankDraft(); clearDraft(); clearTimerState();
@@ -463,9 +509,20 @@ var view=document.getElementById("view");
 var savebar=document.getElementById("savebar");
 var saveBtn=document.getElementById("saveBtn");
 
-/* Unchecked items stay in the list — they are just not part of today. */
+function setById(id){
+  var m=(sets||[]).filter(function(s){ return s.id===id; });
+  return m.length?m[0]:null;
+}
+function activeSet(){ return setById(activeSetId) || sets[0] || null; }
+function activeItems(){ var s=activeSet(); return s?s.items:[]; }
+function allItems(){
+  var out=[];
+  sets.forEach(function(s){ out=out.concat(s.items); });
+  return out;
+}
+/* Unchecked items stay in the set — they are just not part of today. */
 function isSel(id){ return sel[id]!==false; }
-function selectedItems(){ return items.filter(function(t){ return isSel(t.id); }); }
+function selectedItems(){ return activeItems().filter(function(t){ return isSel(t.id); }); }
 function blankDraft(){
   return {date:today(),time:now(),done:{},notes:{},focus:[],comment:"",
     body:"",mind:"",thought:"",feel:50};
@@ -530,7 +587,7 @@ function hasContent(){
 }
 
 /* Identifies a field well enough to find its replacement after a rebuild. */
-var FOCUS_ATTRS=["data-iname","data-imin","data-isec"];
+var FOCUS_ATTRS=["data-sname","data-iname","data-imin","data-isec"];
 function focusKey(el){
   if(!el || !el.getAttribute) return null;
   for(var i=0;i<FOCUS_ATTRS.length;i++){
@@ -577,7 +634,8 @@ function statusHTML(){
   if(!canStore) h+='<div class="warn">このプレビューでは保存できません。HTMLファイルをブラウザで開けば記録は端末に保存されます。</div>';
   if(!fbReady) h+='<div class="warn">Firebase未設定：今はこの端末にのみ保存されています。設定すると全端末で同期されます。</div>';
   else if(syncError) h+='<div class="warn">'+esc(syncError)+'<br>記録はこの端末には保存されています。</div>';
-  else h+='<div class="small"><span class="syncdot'+(synced?" on":"")+'"></span>'+(synced?"クラウドに同期済み":"同期中…")+'</div>';
+  /* Nothing is shown once it is synced — only while it has yet to connect. */
+  else if(!synced) h+='<div class="small"><span class="syncdot"></span>同期中…</div>';
   return h;
 }
 function focusEditorHTML(){
@@ -783,7 +841,7 @@ function reviewHTML(){
        + '<div class="big">'+avg+'<span>%</span></div></div>';
     }
     h+='<div class="cue" style="margin:22px 0 4px">メニュー実施率</div>';
-    items.forEach(function(e){
+    allItems().forEach(function(e){
       var c=sessions.filter(function(s){
         return s.items.some(function(i){ return i.exId===e.id && i.done; }); }).length;
       var p=Math.round(c/sessions.length*100);
@@ -952,48 +1010,56 @@ function timerHTML(){
      + '<button class="tbtn sub" id="tstop">終了</button></div>';
     return h;
   }
-  if(timerEditing) return editItemsHTML();
-  if(!items.length) return '<div class="blank">項目がまだない。</div>'
-   + '<button class="ghost" id="editItems">項目を編集</button>';
-
-  var h='<div class="cue lbl" style="margin-bottom:10px">今日やること</div><div class="ex">';
-  items.forEach(function(t){
-    var on=isSel(t.id);
-    h+='<div class="exrow'+(on?" done":"")+'"><div class="exhead" data-tsel="'+t.id+'">'
-     + '<div class="box'+(on?" on":"")+'">✓</div><div class="exname">'+esc(t.name)+'</div>'
-     + '<span class="badge">'+fmtDur(t.sec)+'</span></div></div>';
-  });
-  h+='</div>';
-  var total=selectedItems().reduce(function(a,t){ return a+t.sec; },0);
-  h+='<div class="tsum">合計 '+fmtDur(total)+'</div>';
-  h+='<button class="save" id="tstart"'+(total===0?" disabled":"")+'>スタート</button>';
-  h+='<button class="ghost" id="editItems">項目を編集</button>';
+  var h='<div class="cue lbl" style="margin-bottom:10px">セットを選ぶ</div>';
+  if(!sets.length) h+='<div class="blank">セットがまだない。</div>';
+  /* Every set's body is rendered, open or not, so that unfolding one is a
+     class change the browser can animate instead of a rebuild. */
+  sets.forEach(function(s){ h+=setCardHTML(s); });
+  h+='<button class="ghost" id="addSet">＋ セットを追加</button>';
   h+='<button class="ghost next" id="toRecord">記録へ →</button>';
   return h;
 }
 
-/* Editing never removes an item from the list just because it is unticked —
-   it stays for whenever it comes round again. */
-function editItemsHTML(){
-  var h='<div class="cue lbl" style="margin-bottom:10px">項目を編集</div>';
-  if(!items.length) h+='<div class="blank">下から追加しよう。</div>';
-  items.forEach(function(t,i){
-    h+='<div class="edrow">'
-     + '<input class="edname" type="text" data-iname="'+t.id+'" value="'+esc(t.name)+'">'
+function setDur(s){ return s.items.reduce(function(a,t){ return a+t.sec; },0); }
+function setSelDur(s){
+  return s.items.reduce(function(a,t){ return a+(isSel(t.id)?t.sec:0); },0);
+}
+/* Unticking never removes an item from its set — it stays for whenever it
+   comes round again. */
+function setCardHTML(s){
+  var open=s.id===openSetId, on=s.id===activeSetId;
+  var n=s.items.filter(function(t){ return isSel(t.id); }).length;
+  var h='<div class="setcard'+(open?" open":"")+(on?" on":"")+'" data-setcard="'+s.id+'">'
+   + '<div class="sethead" data-setopen="'+s.id+'">'
+   + '<span class="setchev"></span>'
+   + '<span class="setname">'+esc(s.name)+'</span>'
+   + '<span class="setmeta">'+n+'項目 · '+fmtDur(setSelDur(s))+'</span>'
+   + '</div><div class="setbody"><div class="setinner"><div class="setpad">'
+   + '<div class="cue lbl" style="margin-bottom:6px">セット名</div>'
+   + '<input class="setrename" type="text" data-sname="'+s.id+'" value="'+esc(s.name)+'">';
+  if(!s.items.length) h+='<div class="blank">下から追加しよう。</div>';
+  s.items.forEach(function(t,i){
+    var sel1=isSel(t.id);
+    h+='<div class="edrow'+(sel1?"":" off")+'">'
+     + '<div class="edtop"><div class="box'+(sel1?" on":"")+'" data-tsel="'+t.id+'">✓</div>'
+     + '<input class="edname" type="text" data-iname="'+t.id+'" value="'+esc(t.name)+'"></div>'
      + '<div class="edtime">'
      + '<input class="ednum" type="number" min="0" data-imin="'+t.id+'" value="'+Math.floor(t.sec/60)+'"><span>分</span>'
      + '<input class="ednum" type="number" min="0" max="59" data-isec="'+t.id+'" value="'+(t.sec%60)+'"><span>秒</span>'
      + '<span class="sp"></span>'
-     + '<button class="mi" data-iup="'+i+'">▲</button>'
-     + '<button class="mi" data-idown="'+i+'">▼</button>'
+     + '<button class="mi" data-iup="'+s.id+"|"+i+'">▲</button>'
+     + '<button class="mi" data-idown="'+s.id+"|"+i+'">▼</button>'
      + '<button class="mi" data-idel="'+t.id+'">🗑</button>'
      + '</div></div>';
   });
-  h+='<div class="addrow" style="margin-top:14px"><input type="text" id="nin" placeholder="項目名…" style="flex:2">'
-   + '<input type="number" id="nim" placeholder="分" min="0" style="flex:1;max-width:64px">'
-   + '<button class="add" id="addItem">＋ 追加</button></div>';
-  h+='<button class="save" id="doneEdit">編集を終える</button>';
-  return h;
+  h+='<div class="addrow" style="margin-top:14px">'
+   + '<input type="text" data-nin="'+s.id+'" placeholder="項目名…" style="flex:2">'
+   + '<input type="number" data-nim="'+s.id+'" placeholder="分" min="0" style="flex:1;max-width:64px">'
+   + '<button class="add" data-sadd="'+s.id+'">＋ 追加</button></div>';
+  h+='<div class="tsum">合計 '+fmtDur(setSelDur(s))+'</div>';
+  h+='<button class="save" data-sstart="'+s.id+'"'+(setSelDur(s)===0?" disabled":"")+'>スタート</button>';
+  h+='<button class="ghost danger sm setdel" data-sdel="'+s.id+'">このセットを削除</button>';
+  return h+'</div></div></div></div>';
 }
 
 function bindTimer(){
@@ -1007,21 +1073,17 @@ function bindTimer(){
     document.getElementById("tstop").onclick=stopTimer;
     return;
   }
-  if(timerEditing){ bindItemEditor(); return; }
-  [].forEach.call(view.querySelectorAll("[data-tsel]"),function(el){
-    el.onclick=function(){ var id=el.getAttribute("data-tsel");
-      sel[id]=!isSel(id); persist(); render(); };
-  });
-  var startBtn=document.getElementById("tstart");
-  if(startBtn) startBtn.onclick=startTimer;
-  var ei=document.getElementById("editItems");
-  if(ei) ei.onclick=function(){ timerEditing=true; render(); };
+  bindSets();
   var tr=document.getElementById("toRecord");
   if(tr) tr.onclick=function(){ tab="record"; setTab(); render(); };
 }
 
 function itemById(id){
-  var m=items.filter(function(t){ return t.id===id; });
+  var m=allItems().filter(function(t){ return t.id===id; });
+  return m.length?m[0]:null;
+}
+function setOfItem(id){
+  var m=sets.filter(function(s){ return s.items.some(function(t){ return t.id===id; }); });
   return m.length?m[0]:null;
 }
 function setItemSec(id,mins,secs){
@@ -1029,7 +1091,55 @@ function setItemSec(id,mins,secs){
   t.sec=Math.max(1,(mins|0)*60+(secs|0));
   persist();
 }
-function bindItemEditor(){
+/* Repaints only what a card's header shows, so tweaking a time inside an open
+   set does not rebuild the inputs the user is working in. */
+function refreshSetMeta(id){
+  var s=setById(id), card=view.querySelector('[data-setcard="'+id+'"]');
+  if(!s || !card) return;
+  var n=s.items.filter(function(t){ return isSel(t.id); }).length;
+  var meta=card.querySelector(".setmeta"), sum=card.querySelector(".tsum");
+  var go=card.querySelector("[data-sstart]");
+  if(meta) meta.textContent=n+"項目 · "+fmtDur(setSelDur(s));
+  if(sum) sum.textContent="合計 "+fmtDur(setSelDur(s));
+  if(go) go.disabled=setSelDur(s)===0;
+}
+function applySetOpen(){
+  [].forEach.call(view.querySelectorAll("[data-setcard]"),function(el){
+    var id=el.getAttribute("data-setcard");
+    el.className="setcard"+(id===openSetId?" open":"")+(id===activeSetId?" on":"");
+  });
+}
+function bindSets(){
+  [].forEach.call(view.querySelectorAll("[data-setopen]"),function(el){
+    el.onclick=function(){
+      var id=el.getAttribute("data-setopen");
+      /* Unfolding a set is also how you pick it for today. */
+      if(openSetId===id) openSetId=null;
+      else { openSetId=id; activeSetId=id; }
+      persist(); applySetOpen();
+    };
+  });
+  [].forEach.call(view.querySelectorAll("[data-sname]"),function(el){
+    el.oninput=function(){
+      var s=setById(el.getAttribute("data-sname"));
+      if(!s) return;
+      s.name=el.value; persist();
+      var card=view.querySelector('[data-setcard="'+s.id+'"]');
+      var lbl=card&&card.querySelector(".setname");
+      if(lbl) lbl.textContent=s.name;
+    };
+  });
+  [].forEach.call(view.querySelectorAll("[data-tsel]"),function(el){
+    el.onclick=function(){
+      var id=el.getAttribute("data-tsel");
+      sel[id]=!isSel(id); persist();
+      var on=isSel(id);
+      el.className="box"+(on?" on":"");
+      var row=el.parentNode.parentNode;
+      row.className="edrow"+(on?"":" off");
+      var s=setOfItem(id); if(s) refreshSetMeta(s.id);
+    };
+  });
   [].forEach.call(view.querySelectorAll("[data-iname]"),function(el){
     el.oninput=function(){ var t=itemById(el.getAttribute("data-iname"));
       if(t){ t.name=el.value; persist(); } };
@@ -1037,35 +1147,66 @@ function bindItemEditor(){
   function timeHandler(attr){
     return function(el){
       el.onchange=function(){
-        var id=el.getAttribute(attr), row=view.querySelector('[data-imin="'+id+'"]');
-        var s=view.querySelector('[data-isec="'+id+'"]');
-        setItemSec(id,+row.value||0,+s.value||0);
+        var id=el.getAttribute(attr), mi=view.querySelector('[data-imin="'+id+'"]');
+        var se=view.querySelector('[data-isec="'+id+'"]');
+        setItemSec(id,+mi.value||0,+se.value||0);
+        var s=setOfItem(id); if(s) refreshSetMeta(s.id);
       };
     };
   }
   [].forEach.call(view.querySelectorAll("[data-imin]"),timeHandler("data-imin"));
   [].forEach.call(view.querySelectorAll("[data-isec]"),timeHandler("data-isec"));
-  [].forEach.call(view.querySelectorAll("[data-iup]"),function(el){
-    el.onclick=function(){ var i=+el.getAttribute("data-iup"); if(i>0){
-      var a=items[i-1]; items[i-1]=items[i]; items[i]=a; persist(); render(); } };
-  });
-  [].forEach.call(view.querySelectorAll("[data-idown]"),function(el){
-    el.onclick=function(){ var i=+el.getAttribute("data-idown"); if(i<items.length-1){
-      var a=items[i+1]; items[i+1]=items[i]; items[i]=a; persist(); render(); } };
-  });
+  function move(attr,step){
+    return function(el){
+      el.onclick=function(){
+        var p=el.getAttribute(attr).split("|"), s=setById(p[0]), i=+p[1], j=i+step;
+        if(!s || j<0 || j>=s.items.length) return;
+        var a=s.items[j]; s.items[j]=s.items[i]; s.items[i]=a;
+        persist(); render();
+      };
+    };
+  }
+  [].forEach.call(view.querySelectorAll("[data-iup]"),move("data-iup",-1));
+  [].forEach.call(view.querySelectorAll("[data-idown]"),move("data-idown",1));
   [].forEach.call(view.querySelectorAll("[data-idel]"),function(el){
-    el.onclick=function(){ var id=el.getAttribute("data-idel"), t=itemById(id);
-      if(!t || !confirm("「"+t.name+"」を削除する？")) return;
-      items=items.filter(function(x){ return x.id!==id; });
-      delete sel[id]; persist(); render(); };
+    el.onclick=function(){
+      var id=el.getAttribute("data-idel"), t=itemById(id), s=setOfItem(id);
+      if(!t || !s || !confirm("「"+t.name+"」を削除する？")) return;
+      s.items=s.items.filter(function(x){ return x.id!==id; });
+      delete sel[id]; persist(); render();
+    };
   });
-  document.getElementById("addItem").onclick=function(){
-    var n=document.getElementById("nin"), m=document.getElementById("nim");
-    var v=n.value.trim(); if(!v) return;
-    items.push({id:uid(),name:v,sec:Math.max(1,Math.round((+m.value||1)*60))});
-    n.value=""; m.value=""; persist(); render();
+  [].forEach.call(view.querySelectorAll("[data-sadd]"),function(el){
+    el.onclick=function(){
+      var id=el.getAttribute("data-sadd"), s=setById(id);
+      var n=view.querySelector('[data-nin="'+id+'"]'), m=view.querySelector('[data-nim="'+id+'"]');
+      var v=n.value.trim(); if(!s || !v) return;
+      s.items.push({id:uid(),name:v,sec:Math.max(1,Math.round((+m.value||1)*60))});
+      n.value=""; m.value=""; persist(); render();
+    };
+  });
+  [].forEach.call(view.querySelectorAll("[data-sstart]"),function(el){
+    el.onclick=function(){
+      activeSetId=el.getAttribute("data-sstart"); persist(); startTimer();
+    };
+  });
+  [].forEach.call(view.querySelectorAll("[data-sdel]"),function(el){
+    el.onclick=function(){
+      var s=setById(el.getAttribute("data-sdel"));
+      if(!s || !confirm("「"+s.name+"」を削除する？中の項目もなくなる。")) return;
+      s.items.forEach(function(t){ delete sel[t.id]; });
+      sets=sets.filter(function(x){ return x.id!==s.id; });
+      if(activeSetId===s.id) activeSetId = sets.length?sets[0].id:null;
+      if(openSetId===s.id) openSetId=activeSetId;
+      persist(); render();
+    };
+  });
+  var as=document.getElementById("addSet");
+  if(as) as.onclick=function(){
+    var s={id:uid(),name:"セット"+(sets.length+1),items:[]};
+    sets.push(s); activeSetId=s.id; openSetId=s.id;
+    persist(); render();
   };
-  document.getElementById("doneEdit").onclick=function(){ timerEditing=false; render(); };
 }
 
 /* iOS discards a backgrounded page, which used to lose a running timer
