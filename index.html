@@ -381,6 +381,22 @@ if(!ALARM_TYPES.some(function(a){ return a.id===alarmType; })) alarmType="bell";
 var voiceURI=load("act:voice","");
 var speechVol=load("act:svol",1);
 var speechRate=load("act:srate",1);
+/* Only one Japanese voice ships with iOS, so the tone is varied here to give
+   more than one thing to choose from. The rest have to be downloaded on the
+   phone itself — a web page cannot install a voice. */
+var TONES=[
+  {id:"low2",name:"とても低い",pitch:0.6},
+  {id:"low",name:"低い",pitch:0.8},
+  {id:"mid",name:"ふつう",pitch:1},
+  {id:"high",name:"高い",pitch:1.25},
+  {id:"high2",name:"とても高い",pitch:1.5}
+];
+var speechTone=load("act:stone","mid");
+if(!TONES.some(function(t){ return t.id===speechTone; })) speechTone="mid";
+function tonePitch(id){
+  var m=TONES.filter(function(t){ return t.id===(id||speechTone); });
+  return m.length?m[0].pitch:1;
+}
 var voiceList=[];
 var draft=restoreDraft();
 
@@ -1211,10 +1227,15 @@ function helpHTML(){
    + 'それでも鳴らないときは、画面をどこか一度<b>指で触ってから</b>スタートしてください。'
    + 'iPhoneは、一度も触っていない画面では音を出さない決まりになっています。</dd>'
    + '<dt>読み上げの声が小さい・聞き取りにくい</dt>'
-   + '<dd>右上の<b>「···」→ 読み上げ</b>で、<b>声の種類・大きさ・速さ</b>を変えられます。'
-   + '声は▶で聞き比べてから選べます。聞き取りにくいときは<b>速さを 0.8 くらいに下げる</b>と'
+   + '<dd>右上の<b>「···」→ 読み上げ</b>で、<b>声の高さ・大きさ・速さ</b>を変えられます。'
+   + '▶で聞き比べてから選べます。聞き取りにくいときは<b>速さを 0.8 くらいに下げる</b>と'
    + 'はっきりします。なお100%が端末で出せる最大なので、それ以上大きくしたいときは'
    + '<b>iPhone本体の音量</b>を上げてください。</dd>'
+   + '<dt>声の種類をもっと増やしたい</dt>'
+   + '<dd>声はiPhoneに入っているものを使うので、アプリからは増やせません。'
+   + 'iPhoneの<b>設定 → アクセシビリティ → 読み上げコンテンツ → 声 → 日本語</b>を開いて、'
+   + 'Otoya・Hattori・O-ren などを<b>ダウンロード</b>してください。'
+   + '入れたぶんだけ、このアプリの「読み上げ」に並びます。</dd>'
    + '<dt>ホーム画面に置きたい</dt>'
    + '<dd>Safariで開いて、下の<b>共有ボタン（□に↑）</b>から'
    + '<b>「ホーム画面に追加」</b>を選びます。アプリのように開けるようになります。</dd>'
@@ -1327,13 +1348,13 @@ function pickVoice(){
   var m=voiceList.filter(function(v){ return v.voiceURI===voiceURI || v.name===voiceURI; });
   return m.length?m[0]:null;
 }
-function speak(text,vURI){
+function speak(text,vURI,tone){
   if(!text || !window.speechSynthesis) return;
   try{
     var sy=window.speechSynthesis;
     if(sy.speaking||sy.pending) sy.cancel();
     var u=new SpeechSynthesisUtterance(text);
-    u.lang="ja-JP"; u.rate=speechRate; u.volume=speechVol; u.pitch=1;
+    u.lang="ja-JP"; u.rate=speechRate; u.volume=speechVol; u.pitch=tonePitch(tone);
     var v=vURI ? voiceList.filter(function(x){ return x.voiceURI===vURI; })[0] : pickVoice();
     if(v) u.voice=v;
     sy.speak(u);
@@ -1714,7 +1735,7 @@ function openSheet(){
   h+='</div>';
 
   h+='<div class="cue" style="margin-top:24px">読み上げ</div>';
-  if(voiceList.length){
+  if(voiceList.length>1){
     h+='<div class="mlist">';
     voiceList.forEach(function(v){
       var on=voiceURI===v.voiceURI;
@@ -1723,8 +1744,21 @@ function openSheet(){
        + '<button class="mi'+(on?" on":"")+'" data-selvoice="'+esc(v.voiceURI)+'">✓</button></div>';
     });
     h+='</div>';
-  } else {
-    h+='<div class="small">この端末では声を選べません。</div>';
+  }
+  h+='<div class="mlist">';
+  TONES.forEach(function(t){
+    var on=speechTone===t.id;
+    h+='<div class="mrow"><span class="mname'+(on?" cur":"")+'">'+esc(t.name)+'</span>'
+     + '<button class="mi" data-prevtone="'+t.id+'">▶</button>'
+     + '<button class="mi'+(on?" on":"")+'" data-seltone="'+t.id+'">✓</button></div>';
+  });
+  h+='</div>';
+  if(voiceList.length<2){
+    h+='<div class="small">この端末に入っている日本語の声は'
+     + (voiceList.length?esc(voiceList[0].name)+'の1種類':"まだありません")+'。'
+     + '声そのものを増やすには、iPhoneの<br>'
+     + '設定 → アクセシビリティ → 読み上げコンテンツ → 声 → 日本語<br>'
+     + 'から追加してください。追加するとここに並びます。</div>';
   }
   h+='<div class="vrow"><span class="vlbl">大きさ</span>'
    + '<input type="range" id="svol" min="20" max="100" step="5" value="'+Math.round(speechVol*100)+'">'
@@ -1783,6 +1817,13 @@ function openSheet(){
     speechRate=+this.value/100; save("act:srate",speechRate);
     document.getElementById("sratev").textContent=speechRate.toFixed(1);
   };
+  [].forEach.call(modal.querySelectorAll("[data-prevtone]"),function(el){
+    el.onclick=function(){ primeSpeech(); speak("エクササイズ",null,el.getAttribute("data-prevtone")); };
+  });
+  [].forEach.call(modal.querySelectorAll("[data-seltone]"),function(el){
+    el.onclick=function(){ speechTone=el.getAttribute("data-seltone"); save("act:stone",speechTone);
+      primeSpeech(); speak("エクササイズ"); openSheet(); };
+  });
   var tv=document.getElementById("tryvoice");
   if(tv) tv.onclick=function(){ primeSpeech(); speak("エクササイズ"); };
   [].forEach.call(modal.querySelectorAll("[data-prevalarm]"),function(el){
