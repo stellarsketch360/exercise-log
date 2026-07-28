@@ -155,6 +155,9 @@
     border-left:3px solid var(--red);padding-left:11px;}
   .faq dd{margin:8px 0 0;padding-left:14px;color:var(--dim);}
   .faq dd b{color:var(--ink);}
+  .hsub{font-family:var(--serif);font-size:15px;color:var(--ink);margin:16px 0 6px;}
+  .faq ol{margin:0 0 14px;padding-left:22px;}
+  .faq li{margin-bottom:7px;}
   .blank{text-align:center;color:var(--dim);font-family:var(--serif);font-style:italic;
     font-size:15px;line-height:1.7;padding:48px 20px;}
   .scrim{position:fixed;inset:0;background:rgba(43,38,34,.40);display:flex;align-items:flex-end;
@@ -297,7 +300,6 @@ function save(k,v){ try{ var s=JSON.stringify(v); if(canStore)localStorage.setIt
 
 /* ---------- defaults ---------- */
 var DEF_ITEMS=[
-  {id:"i_test",name:"15秒のテスト",sec:15},
   {id:"i_chair",name:"椅子",sec:600},
   {id:"i_solo",name:"個人",sec:300}
 ];
@@ -332,7 +334,15 @@ function loadItems(){
 }
 function normSets(list){
   return (list||[]).map(function(s){
-    return {id:s.id||uid(),name:s.name||"セット",items:normItems(s.items)};
+    return {id:s.id||uid(),name:s.name||"セット",items:dropSeededTest(normItems(s.items))};
+  });
+}
+/* Early versions seeded a 15-second item for trying the timer out. It is gone
+   from the defaults; drop the one already saved too, but only while it is
+   untouched — a renamed or retimed one is the user's now. */
+function dropSeededTest(list){
+  return list.filter(function(t){
+    return !(t.id==="i_test" && t.name==="15秒のテスト" && t.sec===15);
   });
 }
 /* There used to be a single list of items. It becomes セット1 so that nothing
@@ -340,7 +350,7 @@ function normSets(list){
 function loadSets(){
   var saved=load("act:sets",null);
   if(saved) return normSets(saved);
-  return [{id:"set1",name:"セット1",items:loadItems()}];
+  return [{id:"set1",name:"セット1",items:dropSeededTest(loadItems())}];
 }
 
 /* ---------- state ---------- */
@@ -594,52 +604,6 @@ if(fbReady){
     if(c) authFailed(e);
   });
   firebase.auth().signInAnonymously().catch(syncFailed);
-}
-
-/* ---------- test data (opt-in) ---------- */
-var TXT_BODY=["肩と首が張っていた。","体が軽かった。","寝不足で重だるい。","可動域が広く感じた。",
-  "腰に少し違和感が残った。","温まるまで時間がかかった。","呼吸が深く入った。","脚に疲れが残っていた。",
-  "体の軸が安定していた。","力みが抜けなかった。"];
-var TXT_MIND=["落ち着いていた。","少し焦りがあった。","気持ちが乗らなかった。","静かな集中があった。",
-  "不安が残ったままだった。","機嫌がよかった。","気が散りやすかった。","途中から楽しくなった。",
-  "結果を気にしてしまった。","穏やかに始められた。"];
-var TXT_THOUGHT=["考えが先に走っていた。","余計な判断をせずにいられた。","手順を追うことに集中しすぎた。",
-  "途中で気づいて切り替えられた。","言葉にする前に体が動いた。","比較する気持ちが出た。",
-  "ただ流れに乗れた。","意識することを決めずに始めていた。","迷いが少なかった。"];
-var TXT_COMMENT=["途中で集中が切れた。","短時間でも整った。","終わったあと呼吸が楽になった。",
-  "時間がなくて駆け足。","今日は無理せず軽めに。","久々に良い手応え。","夜にやると集中が散る。",
-  "後半になって調子が上がった。"];
-
-/* Builds a plausible history for testing. Uses the current exercise and
-   preset lists rather than fixed names, so it stays valid after edits. */
-function sample(days){
-  function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
-  function chance(p){ return Math.random()<p; }
-  var base=new Date(), out=[], n=days||120;
-  for(var b=n;b>=0;b--){
-    if(!chance(0.6)) continue;               /* rest days leave natural gaps */
-    var d=new Date(base); d.setDate(d.getDate()-b);
-    /* Each day is run from one set, so pick one and record just its items. */
-    var src=sets.length?sets[Math.floor(Math.random()*sets.length)]:null;
-    var recItems=(src?src.items:[]).map(function(e){
-      return {exId:e.id,name:e.name,sec:e.sec,done:chance(0.78)};
-    });
-    if(recItems.length && !recItems.some(function(i){ return i.done; })) recItems[0].done=true;
-    var focus=[], pool=presets.map(function(p){ return p.text; });
-    var k=chance(0.25)?0:(chance(0.5)?1:2);
-    while(focus.length<k && pool.length) focus.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
-    var hh=chance(0.2)?21+Math.floor(Math.random()*2):7+Math.floor(Math.random()*3);
-    out.push({id:uid(),
-      date:d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()),
-      time:pad(hh)+":"+pad(Math.floor(Math.random()*12)*5),
-      focus:focus,
-      comment:chance(0.4)?pick(TXT_COMMENT):"",
-      body:chance(0.8)?pick(TXT_BODY):"",
-      mind:chance(0.8)?pick(TXT_MIND):"",
-      thought:chance(0.75)?pick(TXT_THOUGHT):"",
-      items:recItems});
-  }
-  return out.reverse();                      /* newest first, as the app expects */
 }
 
 /* Puts every setting and the whole log back to a first-launch state. */
@@ -1157,6 +1121,43 @@ function picTabs(on){
   });
   return pic(out+'<line x1="0" y1="38" x2="320" y2="38" stroke="var(--line)" stroke-width="1"/>',48);
 }
+
+/* Two taps, drawn — the share glyph in particular is hard to describe. */
+function picShare(){
+  return pic(
+    '<text x="6" y="16" font-size="11.5" fill="var(--red)">① 画面のいちばん下にある、このボタン</text>'
+   + '<rect x="4" y="28" width="312" height="54" rx="14" fill="var(--house)" stroke="var(--line)"/>'
+   + '<path d="M52 47 l-9 8 l9 8" fill="none" stroke="var(--dim)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+   + '<path d="M104 47 l9 8 l-9 8" fill="none" stroke="var(--line)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+   + '<path d="M148 53 v18 h24 v-18" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/>'
+   + '<path d="M160 62 v-22 M152 47 l8 -8 l8 8" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+   + '<circle cx="160" cy="55" r="25" fill="none" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="4 4"/>'
+   + '<rect x="206" y="45" width="18" height="20" rx="3" fill="none" stroke="var(--line)" stroke-width="2"/>'
+   + '<rect x="258" y="45" width="18" height="20" rx="3" fill="none" stroke="var(--line)" stroke-width="2"/>'
+   + '<rect x="264" y="39" width="18" height="20" rx="3" fill="none" stroke="var(--line)" stroke-width="2"/>', 92);
+}
+function picAddMenu(){
+  return pic(
+    '<text x="6" y="16" font-size="11.5" fill="var(--red)">② 出てきた一覧の、これ</text>'
+   + '<rect x="4" y="26" width="312" height="104" rx="14" fill="var(--card)" stroke="var(--line)"/>'
+   + '<text x="22" y="50" font-size="13" fill="var(--line)">コピー</text>'
+   + '<rect x="12" y="60" width="296" height="36" rx="9" fill="var(--house)" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="4 4"/>'
+   + '<text x="22" y="84" font-size="13.5" fill="var(--ink)">ホーム画面に追加</text>'
+   + '<rect x="272" y="68" width="20" height="20" rx="5" fill="none" stroke="var(--ink)" stroke-width="1.6"/>'
+   + '<path d="M282 73 v10 M277 78 h10" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round"/>'
+   + '<text x="22" y="120" font-size="13" fill="var(--line)">お気に入りに追加</text>', 140);
+}
+function picChrome(){
+  return pic(
+    '<text x="6" y="16" font-size="11.5" fill="var(--red)">① 画面のいちばん上にある、このボタン</text>'
+   + '<rect x="4" y="28" width="312" height="48" rx="14" fill="var(--house)" stroke="var(--line)"/>'
+   + '<rect x="20" y="40" width="228" height="24" rx="12" fill="var(--card)" stroke="var(--line)"/>'
+   + '<text x="34" y="57" font-size="11" fill="var(--dim)">exercise-log</text>'
+   + '<circle cx="284" cy="44" r="2.4" fill="var(--ink)"/>'
+   + '<circle cx="284" cy="52" r="2.4" fill="var(--ink)"/>'
+   + '<circle cx="284" cy="60" r="2.4" fill="var(--ink)"/>'
+   + '<circle cx="284" cy="52" r="19" fill="none" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="4 4"/>', 86);
+}
 function helpHTML(){
   var h='<div class="help">';
   h+='<p class="hlead">このアプリは、エクササイズを<b>「決める → 測る → 書く」</b>の順で'
@@ -1213,9 +1214,17 @@ function helpHTML(){
   h+='<div class="hsep"></div><div class="htitle">その他</div>';
   h+='<dl class="faq">'
    + '<dt>ホーム画面に置きたい</dt>'
-   + '<dd>iPhone（Safari）は、下の<b>共有ボタン（□に↑）から「ホーム画面に追加」</b>を選びます。'
-   + 'Android（Chrome）は、右上の<b>「⋮」から「ホーム画面に追加」</b>を選びます。'
-   + 'アプリのように開けるようになります。</dd>'
+   + '<dd>置いておくと、ふつうのアプリと同じように開けます。'
+   + '<div class="hsub">iPhone（Safari）の場合</div>'
+   + '<ol><li>このページを開いた状態で、画面の下にある<b>共有ボタン</b>'
+   + '（四角から上矢印が出ているアイコン）を押します。</li>'
+   + '<li>出てきた一覧から<b>「ホーム画面に追加」</b>を選び、右上の<b>「追加」</b>を押します。</li></ol>'
+   + picShare() + picAddMenu()
+   + '<div class="hsub">Android（Google Chrome）の場合</div>'
+   + '<ol><li>このページを開いた状態で、画面の右上にある<b>縦に点が3つ並んだボタン</b>を押します。</li>'
+   + '<li>出てきた一覧から<b>「ホーム画面に追加」</b>（または「ショートカットを作成」）を選び、'
+   + '<b>「追加」</b>を押します。</li></ol>'
+   + picChrome() + '</dd>'
    + '<dt>別の端末でも同じ記録を見たい</dt>'
    + '<dd>右上の<b>「···」→ アカウント → Googleでログイン</b>を押します。'
    + '今ある記録はそのまま引き継がれます。'
@@ -1708,8 +1717,6 @@ function openSheet(){
   }
 
   h+='<div class="cue" style="margin-top:24px">データ</div>'
-   + '<button class="ghost" id="demo">テスト用のデータを入れる</button>'
-   + '<button class="ghost" id="reset">すべて初期状態に戻す（テスト用）</button>'
    + '<button class="ghost" id="wipe">記録をすべて削除</button>'
    + '</div></div>';
   modal.innerHTML=h;
@@ -1728,24 +1735,6 @@ function openSheet(){
     el.onclick=function(){ alarmType=el.getAttribute("data-selalarm"); save("act:alarm",alarmType);
       ensureAudio(); playBeep(alarmType); openSheet(); };
   });
-  document.getElementById("demo").onclick=function(){
-    if(confirm("約4か月ぶんの記録をランダムに作りますか？\n今ある記録は消えて、入れ替わります。")){
-      var s=sample();
-      sessions=s; editingId=null; expanded=null; preEditDraft=null;
-      draft=blankDraft(); clearDraft();
-      save("act:sessions",sessions);
-      cloudDeleteAllSessions(); cloudAddSessions(s);
-      close(); tab="review"; sub="history"; setTab(); render();
-      toast(s.length+"件の記録を入れました");
-    }
-  };
-  document.getElementById("reset").onclick=function(){
-    if(confirm("すべてを初期状態に戻しますか？\nセット・意識することの言葉・アラーム音・記録がすべて消えます。元に戻せません。")){
-      resetAll();
-      close(); tab="record"; sub="history"; setTab(); render();
-      toast("初期状態に戻しました");
-    }
-  };
   document.getElementById("wipe").onclick=function(){
     if(confirm("記録をすべて削除しますか？\n削除すると元に戻せません。")){
       sessions=[]; editingId=null; expanded=null; preEditDraft=null;
