@@ -353,7 +353,7 @@ var activeSetId=load("act:activeSet",null);
 if(!setById(activeSetId)) activeSetId = sets.length ? sets[0].id : null;
 var openSetId=activeSetId;
 var tab="focus", sub="history", expanded=null, editingId=null, preEditDraft=null;
-var presetEditing=false;
+var presetEditing=false, calAll=false;
 var timerRunning=false, timerPaused=false, timerIndex=-1,
     timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null, audioUnlocked=false,
     timerPrecounting=false, preCount=0, preCountHandle=null,
@@ -1041,13 +1041,29 @@ function monthGrid(y,m){
   }
   return h+'</div></div>';
 }
+/* How many months back the record actually goes. */
+function monthsOfHistory(){
+  var t=new Date(), oldest=null;
+  sessions.forEach(function(s){ if(!oldest || s.date<oldest) oldest=s.date; });
+  if(!oldest) return 1;
+  var p=oldest.split("-");
+  var n=(t.getFullYear()-(+p[0]))*12 + (t.getMonth()-(+p[1]-1)) + 1;
+  return n<1?1:n;
+}
 function calendarHTML(){
-  var t=new Date(), out="";
-  for(var i=0;i<3;i++){                       /* this month and the two before */
+  /* The current month is what anyone looks at day to day; the whole record is
+     a button away rather than a long scroll every time. */
+  var n=calAll?monthsOfHistory():1, t=new Date(), out="";
+  for(var i=0;i<n;i++){
     var d=new Date(t.getFullYear(),t.getMonth()-i,1);
     out+=monthGrid(d.getFullYear(),d.getMonth());
   }
-  return out+'<div class="statnote">色のついた日が、エクササイズをした日です。太い枠が今日です。</div>';
+  out+='<div class="statnote">色のついた日が、エクササイズをした日です。太い枠が今日です。</div>';
+  if(calAll || monthsOfHistory()>1){
+    out+='<button class="ghost sm" id="calall" style="margin-top:12px">'
+     + (calAll?"今月だけ表示する":"すべての記録を見る")+'</button>';
+  }
+  return out;
 }
 var REFLECT=[["body","体の調子"],["mind","心の調子"],["thought","思考の調子"],["comment","気づき"]];
 function firstText(s){
@@ -1227,6 +1243,8 @@ function bindReview(){
   [].forEach.call(view.querySelectorAll("[data-sub]"),function(el){
     el.onclick=function(){ sub=el.getAttribute("data-sub"); render(); };
   });
+  var ca=document.getElementById("calall");
+  if(ca) ca.onclick=function(){ calAll=!calAll; render(); };
   [].forEach.call(view.querySelectorAll("[data-exp]"),function(el){
     el.onclick=function(){ var id=el.getAttribute("data-exp");
       expanded = expanded===id ? null : id; render(); };
