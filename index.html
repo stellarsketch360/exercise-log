@@ -859,7 +859,7 @@ function recordHTML(){
     h+='<button class="ghost sm" id="backFocus">意識することを変える</button></div>';
   }
 
-  h+='<div class="sec"><div class="cue lbl">本日のメニュー</div><div class="ex">';
+  h+='<div class="sec"><div class="cue lbl">今日の項目</div><div class="ex">';
   menuItems().forEach(function(e){
     var on=!!draft.done[e.id];
     h+='<div class="exrow'+(on?" done":"")+'">'
@@ -875,7 +875,7 @@ function recordHTML(){
    + '<textarea id="md" placeholder="今の心の状態…">'+esc(draft.mind)+'</textarea></div>';
   h+='<div class="sec"><div class="cue lbl">思考の調子</div>'
    + '<textarea id="th" placeholder="今の思考の状態…">'+esc(draft.thought)+'</textarea></div>';
-  h+='<div class="sec"><div class="cue lbl">全体の感想</div>'
+  h+='<div class="sec"><div class="cue lbl">気づき</div>'
    + '<textarea id="cm" placeholder="気づきなど…">'+esc(draft.comment)+'</textarea></div>';
 
   if(editingId) h+='<button class="ghost danger" id="delRec">この記録を削除</button>';
@@ -1119,7 +1119,7 @@ function reviewHTML(){
         s.focus.forEach(function(f){ h+='<div class="cfocus">'+esc(f)+'</div>'; });
         h+='</div>';
       }
-      h+='<div class="csec"><div class="clbl">メニュー</div>';
+      h+='<div class="csec"><div class="clbl">項目</div>';
       s.items.forEach(function(i){
         h+='<div class="item'+(i.done?" d":"")+'"><span class="tick'+(i.done?" d":"")+'">✓</span>'
          + '<span class="iname">'+esc(i.name)+'</span>'
@@ -1160,13 +1160,12 @@ function picTabs(on){
 function helpHTML(){
   var h='<div class="help">';
   h+='<p class="hlead">このアプリは、エクササイズを<b>「決める → 測る → 書く」</b>の順で'
-   + '毎日くりかえすためのものです。上の並びを左から右へ進んでいくだけで、1回分が終わります。</p>';
+   + '毎日くりかえすためのものです。</p>';
 
   h+='<div class="hstep"><div class="hnum">1</div><div class="htitle">今日、意識することを決める</div></div>';
   h+=picTabs(0);
-  h+='<p>アプリを開くと、まずこの画面になります。'
-   + '「オープン」「周りを見る」のように、<b>今日のエクササイズで心がけたいこと</b>を選びます。</p>'
-   + '<ul><li>並んでいる言葉を<b>押すと選べます</b>。もう一度押すと外れます。</li>'
+  h+='<p>アプリを開くと、まずこの画面になります。今日のエクササイズで意識したいことを選びます。</p>'
+   + '<ul><li>並んでいる言葉を押すと選べます。もう一度押すと外れます。</li>'
    + '<li>新しい言葉は、下の入力欄に打って「＋ 追加」を押すと増やせます。</li>'
    + '<li><b>「編集・削除」</b>を押すと、よく使う言葉に★を付けて先頭に出したり、'
    + 'いらない言葉を消したりできます。</li>'
@@ -1175,8 +1174,8 @@ function helpHTML(){
 
   h+='<div class="hstep"><div class="hnum">2</div><div class="htitle">タイマーを動かして体を動かす</div></div>';
   h+=picTabs(1);
-  h+='<p>ここには<b>「セット」</b>が並びます。セットとは、その日にやることをまとめたものです。'
-   + '「椅子 10分」「個人 5分」のように、やることと時間を並べて登録しておきます。</p>';
+  h+='<p>ここには<b>「セット」</b>が並びます。「椅子 10分」のように、'
+   + '<b>ひとつの動きと時間の組を「項目」と呼び、その項目をいくつかまとめたものが「セット」</b>です。</p>';
   h+=pic(
     '<rect x="4" y="6" width="312" height="56" rx="12" fill="var(--card)" stroke="var(--red)"/>'
    + '<path d="M22 28 l7 7 l7 -7" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'
@@ -1188,53 +1187,39 @@ function helpHTML(){
    + '<text x="196" y="86" font-size="11" fill="var(--red)">ここを押すと始まります</text>'
    + '<path d="M276 74 l8 -14" stroke="var(--red)" stroke-width="1.5"/>', 96);
   h+='<ul><li><b>赤い丸の ▶ を押すと始まります。</b>5つ数えてから最初の項目が動き出します。</li>'
-   + '<li>1つ終わるたびに<b>音が鳴り</b>、次にやることの名前を<b>読み上げます</b>。</li>'
-   + '<li>セットの名前の部分を押すと開いて、<b>やることの追加・名前・時間の変更</b>ができます。'
+   + '<li>項目がひとつ終わるたびに音が鳴り、次の項目の名前を読み上げます。</li>'
+   + '<li>セットの名前の部分を押すと開いて、項目の追加・名前・時間の変更ができます。'
    + '左のチェックを外した項目は、その日だけお休みになります（消えません）。</li>'
-   + '<li>セットは<b>いくつでも作れます</b>。時間のある日と無い日で使い分けてください。</li>'
+   + '<li>セットはいくつでも作れます。時間のある日や無い日で使い分けてください。</li>'
    + '<li>途中でやめたいときは「終了」、飛ばしたいときは「スキップ」を押します。</li></ul>'
-   + '<p>全部終わると、音が鳴って<b>自動で「3 記録」の画面に変わります</b>。</p>';
+   + '<p>全部終わると、音が鳴って自動で「3 記録」の画面に変わります。</p>';
 
   h+='<div class="hstep"><div class="hnum">3</div><div class="htitle">今日の出来を書き残す</div></div>';
   h+=picTabs(2);
-  h+='<p>やった項目には<b>自動でチェックが入っています</b>。'
-   + 'そのあと、体・心・思考の調子と、気づいたことを書きます。</p>'
-   + '<ul><li>全部書かなくてかまいません。<b>ひとつでも書けば保存できます。</b></li>'
+  h+='<p>終わった項目には自動でチェックが入っています。'
+   + 'そのあと、体・心・思考の調子と、気づきを書きます。</p>'
+   + '<ul><li>全部書かなくてかまいません。ひとつでも書けば保存できます。</li>'
    + '<li>書けたら、画面の下にある<b>赤い「記録を保存」</b>を押します。</li>'
    + '<li>途中で閉じても、書きかけは残っています。</li></ul>';
 
   h+='<div class="hstep"><div class="hnum">4</div><div class="htitle">続きぐあいを見る</div></div>';
   h+=picTabs(3);
-  h+='<p>「まとめ」には<b>履歴</b>と<b>統計</b>があります。</p>'
-   + '<ul><li><b>履歴</b>…過去の記録が新しい順に並びます。日付の部分を押すと、その日の中身が開きます。'
-   + '中の<b>「この記録を編集」</b>から、書き直しや削除ができます。</li>'
-   + '<li><b>統計</b>…続いている日数、カレンダー、これまでの合計が出ます。'
-   + 'カレンダーは1マスが1日で、<b>色がついた日がやった日</b>です。'
+  h+='<p>「まとめ」には履歴と統計があります。</p>'
+   + '<ul><li>履歴…中の<b>「この記録を編集」</b>から、書き直しや削除ができます。</li>'
+   + '<li>統計…続いている日数、カレンダー、これまでの合計が出ます。'
+   + 'カレンダーは1マスが1日で、色がついた日がエクササイズをした日です。'
    + '空きが並んでいたら休みすぎ、という目印になります。</li></ul>';
 
-  h+='<div class="hsep"></div><div class="htitle">困ったときは</div>';
+  h+='<div class="hsep"></div><div class="htitle">その他</div>';
   h+='<dl class="faq">'
-   + '<dt>音が鳴らない</dt>'
-   + '<dd>iPhoneの<b>横のスイッチ（消音）</b>と<b>音量</b>を確かめてください。'
-   + 'それでも鳴らないときは、画面をどこか一度<b>指で触ってから</b>スタートしてください。'
-   + 'iPhoneは、一度も触っていない画面では音を出さない決まりになっています。</dd>'
-   + '<dt>読み上げの声が小さい</dt>'
-   + '<dd>アプリ側はいちばん大きい音で読み上げています。'
-   + 'これ以上大きくしたいときは<b>iPhone本体の音量</b>を上げてください。</dd>'
    + '<dt>ホーム画面に置きたい</dt>'
-   + '<dd>Safariで開いて、下の<b>共有ボタン（□に↑）</b>から'
-   + '<b>「ホーム画面に追加」</b>を選びます。アプリのように開けるようになります。</dd>'
+   + '<dd>iPhone（Safari）は、下の<b>共有ボタン（□に↑）から「ホーム画面に追加」</b>を選びます。'
+   + 'Android（Chrome）は、右上の<b>「⋮」から「ホーム画面に追加」</b>を選びます。'
+   + 'アプリのように開けるようになります。</dd>'
    + '<dt>別の端末でも同じ記録を見たい</dt>'
    + '<dd>右上の<b>「···」→ アカウント → Googleでログイン</b>を押します。'
    + '今ある記録はそのまま引き継がれます。'
    + '別の端末でも同じアカウントでログインすれば、同じ記録が出ます。</dd>'
-   + '<dt>まちがえて記録した／消したい</dt>'
-   + '<dd>「まとめ」→「履歴」で直したい日を押し、'
-   + '<b>「この記録を編集」</b>から書き直せます。削除もそこにあります。</dd>'
-   + '<dt>設定はどこ</dt>'
-   + '<dd>どの画面でも<b>右上の「···」</b>です。アラームの音、'
-   + 'アカウント、記録の削除がまとまっています。'
-   + '意識することの言葉は<b>「1 意識」の画面</b>で編集します。</dd>'
    + '</dl>';
   return h+'</div>';
 }
