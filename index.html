@@ -222,16 +222,6 @@
     box-shadow:0 4px 14px rgba(43,38,34,.2);}
   .warn{background:#FBF3E7;border:1px solid #E8D6B8;color:#7A5B22;border-radius:9px;padding:10px 12px;
     font-size:12px;line-height:1.6;margin-bottom:18px;font-family:var(--mono);}
-  .vrow{display:flex;align-items:center;gap:12px;margin-top:12px;}
-  .vlbl{flex:0 0 auto;font-size:13px;color:var(--dim);width:44px;}
-  .vval{flex:0 0 auto;font-family:var(--mono);font-size:12px;color:var(--ink);width:44px;text-align:right;}
-  .vrow input[type=range]{flex:1;min-width:0;-webkit-appearance:none;appearance:none;height:4px;
-    border-radius:99px;background:var(--line);outline:none;padding:0;border:none;}
-  .vrow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;
-    border-radius:50%;background:var(--red);cursor:pointer;border:3px solid var(--house);
-    box-shadow:0 0 0 1px var(--red);}
-  .vrow input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;
-    background:var(--red);cursor:pointer;border:3px solid var(--house);}
   .acct{display:flex;align-items:center;font-family:var(--mono);font-size:12px;color:var(--ink);
     background:var(--house);border:1px solid var(--line);border-radius:9px;padding:11px 12px;
     margin-bottom:8px;word-break:break-all;}
@@ -378,26 +368,9 @@ var ALARM_TYPES=[
 var alarmType=load("act:alarm","bell");
 /* Older builds stored alarm ids that no longer exist; fall back to the bell. */
 if(!ALARM_TYPES.some(function(a){ return a.id===alarmType; })) alarmType="bell";
-var voiceURI=load("act:voice","");
-var speechVol=load("act:svol",1);
-var speechRate=load("act:srate",1);
-/* Only one Japanese voice ships with iOS, so the tone is varied here to give
-   more than one thing to choose from. The rest have to be downloaded on the
-   phone itself — a web page cannot install a voice. */
-var TONES=[
-  {id:"low2",name:"とても低い",pitch:0.6},
-  {id:"low",name:"低い",pitch:0.8},
-  {id:"mid",name:"ふつう",pitch:1},
-  {id:"high",name:"高い",pitch:1.25},
-  {id:"high2",name:"とても高い",pitch:1.5}
-];
-var speechTone=load("act:stone","mid");
-if(!TONES.some(function(t){ return t.id===speechTone; })) speechTone="mid";
-function tonePitch(id){
-  var m=TONES.filter(function(t){ return t.id===(id||speechTone); });
-  return m.length?m[0].pitch:1;
-}
-var voiceList=[];
+/* Fixed rather than adjustable: full volume, slightly slow so it is easy to
+   catch mid-exercise, and the device's own pitch. */
+var SPEECH_VOL=1, SPEECH_RATE=0.8, SPEECH_PITCH=1;
 var draft=restoreDraft();
 
 var cloudHandle=null;
@@ -1226,16 +1199,9 @@ function helpHTML(){
    + '<dd>iPhoneの<b>横のスイッチ（消音）</b>と<b>音量</b>を確かめてください。'
    + 'それでも鳴らないときは、画面をどこか一度<b>指で触ってから</b>スタートしてください。'
    + 'iPhoneは、一度も触っていない画面では音を出さない決まりになっています。</dd>'
-   + '<dt>読み上げの声が小さい・聞き取りにくい</dt>'
-   + '<dd>右上の<b>「···」→ 読み上げ</b>で、<b>声の高さ・大きさ・速さ</b>を変えられます。'
-   + '▶で聞き比べてから選べます。聞き取りにくいときは<b>速さを 0.8 くらいに下げる</b>と'
-   + 'はっきりします。なお100%が端末で出せる最大なので、それ以上大きくしたいときは'
-   + '<b>iPhone本体の音量</b>を上げてください。</dd>'
-   + '<dt>声の種類をもっと増やしたい</dt>'
-   + '<dd>声はiPhoneに入っているものを使うので、アプリからは増やせません。'
-   + 'iPhoneの<b>設定 → アクセシビリティ → 読み上げコンテンツ → 声 → 日本語</b>を開いて、'
-   + 'Otoya・Hattori・O-ren などを<b>ダウンロード</b>してください。'
-   + '入れたぶんだけ、このアプリの「読み上げ」に並びます。</dd>'
+   + '<dt>読み上げの声が小さい</dt>'
+   + '<dd>アプリ側はいちばん大きい音で読み上げています。'
+   + 'これ以上大きくしたいときは<b>iPhone本体の音量</b>を上げてください。</dd>'
    + '<dt>ホーム画面に置きたい</dt>'
    + '<dd>Safariで開いて、下の<b>共有ボタン（□に↑）</b>から'
    + '<b>「ホーム画面に追加」</b>を選びます。アプリのように開けるようになります。</dd>'
@@ -1247,7 +1213,7 @@ function helpHTML(){
    + '<dd>「まとめ」→「履歴」で直したい日を押し、'
    + '<b>「この記録を編集」</b>から書き直せます。削除もそこにあります。</dd>'
    + '<dt>設定はどこ</dt>'
-   + '<dd>どの画面でも<b>右上の「···」</b>です。アラームの音、読み上げ、'
+   + '<dd>どの画面でも<b>右上の「···」</b>です。アラームの音、'
    + 'アカウント、記録の消去がまとまっています。'
    + '意識することの言葉は<b>「1 意識」の画面</b>で編集します。</dd>'
    + '</dl>';
@@ -1334,29 +1300,14 @@ function primeSpeech(){
     speechReady=true;
   }catch(e){}
 }
-/* The list is not ready at load in most browsers, hence onvoiceschanged. */
-function loadVoices(){
-  if(!window.speechSynthesis) return;
-  try{
-    var all=window.speechSynthesis.getVoices()||[];
-    /* Item names are Japanese, so an English voice would only mangle them. */
-    voiceList=all.filter(function(v){ return (v.lang||"").toLowerCase().indexOf("ja")===0; });
-  }catch(e){}
-}
-function pickVoice(){
-  if(!voiceURI) return null;
-  var m=voiceList.filter(function(v){ return v.voiceURI===voiceURI || v.name===voiceURI; });
-  return m.length?m[0]:null;
-}
-function speak(text,vURI,tone){
+function speak(text){
   if(!text || !window.speechSynthesis) return;
   try{
     var sy=window.speechSynthesis;
     if(sy.speaking||sy.pending) sy.cancel();
     var u=new SpeechSynthesisUtterance(text);
-    u.lang="ja-JP"; u.rate=speechRate; u.volume=speechVol; u.pitch=tonePitch(tone);
-    var v=vURI ? voiceList.filter(function(x){ return x.voiceURI===vURI; })[0] : pickVoice();
-    if(v) u.voice=v;
+    /* lang alone picks the device's Japanese voice; there is nothing to choose. */
+    u.lang="ja-JP"; u.rate=SPEECH_RATE; u.volume=SPEECH_VOL; u.pitch=SPEECH_PITCH;
     sy.speak(u);
   }catch(e){}
 }
@@ -1734,42 +1685,6 @@ function openSheet(){
   });
   h+='</div>';
 
-  h+='<div class="cue" style="margin-top:24px">読み上げ</div>';
-  if(voiceList.length>1){
-    h+='<div class="mlist">';
-    voiceList.forEach(function(v){
-      var on=voiceURI===v.voiceURI;
-      h+='<div class="mrow"><span class="mname'+(on?" cur":"")+'">'+esc(v.name)+'</span>'
-       + '<button class="mi" data-prevvoice="'+esc(v.voiceURI)+'">▶</button>'
-       + '<button class="mi'+(on?" on":"")+'" data-selvoice="'+esc(v.voiceURI)+'">✓</button></div>';
-    });
-    h+='</div>';
-  }
-  h+='<div class="mlist">';
-  TONES.forEach(function(t){
-    var on=speechTone===t.id;
-    h+='<div class="mrow"><span class="mname'+(on?" cur":"")+'">'+esc(t.name)+'</span>'
-     + '<button class="mi" data-prevtone="'+t.id+'">▶</button>'
-     + '<button class="mi'+(on?" on":"")+'" data-seltone="'+t.id+'">✓</button></div>';
-  });
-  h+='</div>';
-  if(voiceList.length<2){
-    h+='<div class="small">この端末に入っている日本語の声は'
-     + (voiceList.length?esc(voiceList[0].name)+'の1種類':"まだありません")+'。'
-     + '声そのものを増やすには、iPhoneの<br>'
-     + '設定 → アクセシビリティ → 読み上げコンテンツ → 声 → 日本語<br>'
-     + 'から追加してください。追加するとここに並びます。</div>';
-  }
-  h+='<div class="vrow"><span class="vlbl">大きさ</span>'
-   + '<input type="range" id="svol" min="20" max="100" step="5" value="'+Math.round(speechVol*100)+'">'
-   + '<span class="vval" id="svolv">'+Math.round(speechVol*100)+'%</span></div>';
-  h+='<div class="vrow"><span class="vlbl">速さ</span>'
-   + '<input type="range" id="srate" min="60" max="130" step="5" value="'+Math.round(speechRate*100)+'">'
-   + '<span class="vval" id="sratev">'+speechRate.toFixed(1)+'</span></div>';
-  h+='<button class="ghost" id="tryvoice">読み上げを試す</button>';
-  h+='<div class="small" style="margin-top:10px">100%が端末で出せる最大です。'
-   + 'これより大きくしたいときは、iPhone本体の音量を上げてください。</div>';
-
   if(fbReady){
     h+='<div class="cue" style="margin-top:24px">アカウント</div>';
     if(authError) h+='<div class="warn">'+esc(authError)+'</div>';
@@ -1800,32 +1715,6 @@ function openSheet(){
   var so=document.getElementById("signout");
   if(so) so.onclick=signOutGoogle;
 
-  [].forEach.call(modal.querySelectorAll("[data-prevvoice]"),function(el){
-    el.onclick=function(){ primeSpeech(); speak("エクササイズ",el.getAttribute("data-prevvoice")); };
-  });
-  [].forEach.call(modal.querySelectorAll("[data-selvoice]"),function(el){
-    el.onclick=function(){ voiceURI=el.getAttribute("data-selvoice"); save("act:voice",voiceURI);
-      primeSpeech(); speak("エクササイズ"); openSheet(); };
-  });
-  var sv=document.getElementById("svol");
-  if(sv) sv.oninput=function(){
-    speechVol=+this.value/100; save("act:svol",speechVol);
-    document.getElementById("svolv").textContent=this.value+"%";
-  };
-  var sr=document.getElementById("srate");
-  if(sr) sr.oninput=function(){
-    speechRate=+this.value/100; save("act:srate",speechRate);
-    document.getElementById("sratev").textContent=speechRate.toFixed(1);
-  };
-  [].forEach.call(modal.querySelectorAll("[data-prevtone]"),function(el){
-    el.onclick=function(){ primeSpeech(); speak("エクササイズ",null,el.getAttribute("data-prevtone")); };
-  });
-  [].forEach.call(modal.querySelectorAll("[data-seltone]"),function(el){
-    el.onclick=function(){ speechTone=el.getAttribute("data-seltone"); save("act:stone",speechTone);
-      primeSpeech(); speak("エクササイズ"); openSheet(); };
-  });
-  var tv=document.getElementById("tryvoice");
-  if(tv) tv.onclick=function(){ primeSpeech(); speak("エクササイズ"); };
   [].forEach.call(modal.querySelectorAll("[data-prevalarm]"),function(el){
     el.onclick=function(){ ensureAudio(); playBeep(el.getAttribute("data-prevalarm")); };
   });
@@ -1874,18 +1763,6 @@ function setTab(){
 
 restoreTimer();
 setTab();
-
-loadVoices();
-if(window.speechSynthesis){
-  /* The voices arrive after load, so refresh the picker if it is open. */
-  try{
-    window.speechSynthesis.onvoiceschanged=function(){
-      var had=voiceList.length;
-      loadVoices();
-      if(!had && voiceList.length && modal && modal.innerHTML) openSheet();
-    };
-  }catch(e){}
-}
 
 /* iOS unlocks audio only inside a real user gesture, and the alarm itself
    fires from a timer callback. Unlock on the first touch anywhere so the
