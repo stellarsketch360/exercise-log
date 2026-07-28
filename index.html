@@ -799,7 +799,7 @@ function focusEditorHTML(){
       h+='<div class="fline"><div class="ftext">'+esc(f)+'</div>'
        + '<button class="fx" data-unfocus="'+esc(f)+'">✕</button></div>';
     });
-  } else h+='<div class="empty">下の定型から選ぶか、新しく書き起こす。</div>';
+  } else h+='<div class="empty">エクササイズで意識することを選ぶ</div>';
   /* Editing swaps the chips out rather than sitting beside them — the same
      words twice over would only be confusing. */
   if(presetEditing){
@@ -819,10 +819,13 @@ function focusEditorHTML(){
     });
     h+='</div>';
   }
-  h+='<div class="addrow"><input type="text" id="nf" placeholder="追加…">'
-   + '<button class="add" id="addF">＋ 追加</button></div>'
-   + '<button class="ghost sm" id="editP" style="margin-top:10px">'+(presetEditing?"編集を終える":"定型を編集")+'</button>'
-   + '</div>';
+  /* No add box while editing — one way in is enough. */
+  if(!presetEditing){
+    h+='<div class="addrow"><input type="text" id="nf" placeholder="追加…">'
+     + '<button class="add" id="addF">＋ 追加</button></div>';
+  }
+  h+='<button class="ghost sm" id="editP" style="margin-top:10px">'
+   + (presetEditing?"編集を終える":"編集・削除")+'</button></div>';
   return h;
 }
 
@@ -1149,7 +1152,7 @@ function helpHTML(){
    + '「オープン」「周りを見る」のように、<b>今日のエクササイズで心がけたいこと</b>を選びます。</p>'
    + '<ul><li>並んでいる言葉を<b>押すと選べます</b>。もう一度押すと外れます。</li>'
    + '<li>新しい言葉は、下の入力欄に打って「＋ 追加」を押すと増やせます。</li>'
-   + '<li><b>「定型を編集」</b>を押すと、よく使う言葉に★を付けて先頭に出したり、'
+   + '<li><b>「編集・削除」</b>を押すと、よく使う言葉に★を付けて先頭に出したり、'
    + 'いらない言葉を消したりできます。</li>'
    + '<li>思いつかない日は、何も選ばずに次へ進んでかまいません。</li></ul>'
    + '<p>決まったら、下の<b>「タイマーへ →」</b>を押します。</p>';
