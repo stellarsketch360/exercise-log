@@ -118,13 +118,23 @@
   .big{font-family:var(--serif);font-size:38px;color:var(--red);line-height:1;margin-top:9px;}
   .big span{font-size:14px;color:var(--dim);font-family:var(--mono);margin-left:3px;}
   .statnote{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:8px;line-height:1.6;}
-  .cal{display:flex;gap:4px;}
-  .calcol{display:flex;flex-direction:column;gap:4px;flex:1 1 0;min-width:0;}
-  .calcell{aspect-ratio:1;border-radius:4px;background:var(--house);border:1px solid var(--line);}
-  .calcell.on{background:var(--red);border-color:var(--red);}
-  .calcell.future{opacity:.4;background:transparent;border-style:dashed;}
-  .calmon{display:flex;gap:4px;margin:10px 0 6px;font-family:var(--mono);font-size:9.5px;color:var(--dim);}
-  .calmon span{flex:1 1 0;min-width:0;}
+  .mcal{margin-top:18px;}
+  .mcaltitle{font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:8px;}
+  /* The row height is set here rather than with aspect-ratio on the cells:
+     a cell's aspect-ratio does not feed back into the row it sits in, so the
+     rows came out short and the months overlapped each other. */
+  .mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;
+    grid-template-rows:auto;grid-auto-rows:clamp(34px,10.5vw,46px);}
+  .mwd{font-family:var(--mono);font-size:10px;color:var(--dim);text-align:center;padding-bottom:3px;}
+  .mwd.sun{color:#B4564F;}
+  .mwd.sat{color:#5B7CA8;}
+  .mday{display:grid;place-items:center;align-self:stretch;font-family:var(--mono);font-size:12.5px;
+    border-radius:8px;background:var(--house);color:var(--dim);border:2px solid transparent;}
+  .mday.empty{background:transparent;}
+  .mday.on{background:var(--red);color:#fff;}
+  .mday.future{opacity:.35;}
+  .mday.today{border-color:var(--ink);color:var(--ink);font-weight:700;}
+  .mday.today.on{color:#fff;}
   .small{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-bottom:14px;}
   /* Set a size up from the rest of the app — this page is meant to be read. */
   .help{font-size:15px;line-height:1.95;}
@@ -990,31 +1000,32 @@ function streaks(){
   });
   return {cur:cur,best:best};
 }
-var CAL_WEEKS=13;
-/* One square per day, a column per week — the gaps say more at a glance than
-   a percentage does. */
-function calendarHTML(){
-  var m=doneDates(), today=new Date();
-  today.setHours(0,0,0,0);
-  var end=new Date(today);
-  end.setDate(end.getDate()+(6-end.getDay()));      /* round out the week */
-  var start=new Date(end);
-  start.setDate(start.getDate()-(CAL_WEEKS*7-1));
-  var months="", grid="", lastMon=-1;
-  for(var w=0;w<CAL_WEEKS;w++){
-    var top=new Date(start); top.setDate(top.getDate()+w*7);
-    months+='<span>'+(top.getMonth()!==lastMon?(top.getMonth()+1)+"月":"")+'</span>';
-    lastMon=top.getMonth();
-    grid+='<div class="calcol">';
-    for(var dd=0;dd<7;dd++){
-      var c=new Date(top); c.setDate(c.getDate()+dd);
-      var k=dayKey(c);
-      grid+='<div class="calcell'+(m[k]?" on":"")+(c>today?" future":"")+'" title="'+k+'"></div>';
-    }
-    grid+='</div>';
+/* A real calendar, month by month: weekdays across the top, dates in the
+   squares. The previous grid ran weeks down the columns, which is compact but
+   reads like nothing anyone has seen on a wall, and gave no way to tell which
+   row was which weekday or where today sat. */
+function monthGrid(y,m){
+  var done=doneDates(), todayK=dayKey(new Date());
+  var first=new Date(y,m,1), lastDay=new Date(y,m+1,0).getDate();
+  var h='<div class="mcal"><div class="mcaltitle">'+y+'年'+(m+1)+'月</div><div class="mgrid">';
+  WDAY.forEach(function(w,i){
+    h+='<div class="mwd'+(i===0?" sun":i===6?" sat":"")+'">'+w+'</div>';
+  });
+  for(var i=0;i<first.getDay();i++) h+='<div class="mday empty"></div>';
+  for(var d=1;d<=lastDay;d++){
+    var k=y+"-"+pad(m+1)+"-"+pad(d);
+    h+='<div class="mday'+(done[k]?" on":"")+(k===todayK?" today":"")
+     + (k>todayK?" future":"")+'">'+d+'</div>';
   }
-  return '<div class="calmon">'+months+'</div><div class="cal">'+grid+'</div>'
-   + '<div class="statnote">1マス＝1日。色がついた日がやった日。たての並びが日〜土。</div>';
+  return h+'</div></div>';
+}
+function calendarHTML(){
+  var t=new Date(), out="";
+  for(var i=0;i<3;i++){                       /* this month and the two before */
+    var d=new Date(t.getFullYear(),t.getMonth()-i,1);
+    out+=monthGrid(d.getFullYear(),d.getMonth());
+  }
+  return out+'<div class="statnote">色のついた日がやった日。太い枠が今日。</div>';
 }
 var REFLECT=[["body","体の調子"],["mind","心の調子"],["thought","思考の調子"],["comment","気づき"]];
 function firstText(s){
