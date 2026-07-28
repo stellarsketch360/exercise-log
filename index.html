@@ -212,6 +212,16 @@
     box-shadow:0 4px 14px rgba(43,38,34,.2);}
   .warn{background:#FBF3E7;border:1px solid #E8D6B8;color:#7A5B22;border-radius:9px;padding:10px 12px;
     font-size:12px;line-height:1.6;margin-bottom:18px;font-family:var(--mono);}
+  .vrow{display:flex;align-items:center;gap:12px;margin-top:12px;}
+  .vlbl{flex:0 0 auto;font-size:13px;color:var(--dim);width:44px;}
+  .vval{flex:0 0 auto;font-family:var(--mono);font-size:12px;color:var(--ink);width:44px;text-align:right;}
+  .vrow input[type=range]{flex:1;min-width:0;-webkit-appearance:none;appearance:none;height:4px;
+    border-radius:99px;background:var(--line);outline:none;padding:0;border:none;}
+  .vrow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;
+    border-radius:50%;background:var(--red);cursor:pointer;border:3px solid var(--house);
+    box-shadow:0 0 0 1px var(--red);}
+  .vrow input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;
+    background:var(--red);cursor:pointer;border:3px solid var(--house);}
   .acct{display:flex;align-items:center;font-family:var(--mono);font-size:12px;color:var(--ink);
     background:var(--house);border:1px solid var(--line);border-radius:9px;padding:11px 12px;
     margin-bottom:8px;word-break:break-all;}
@@ -347,14 +357,20 @@ var timerRunning=false, timerPaused=false, timerIndex=-1,
     timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null, audioUnlocked=false,
     timerPrecounting=false, preCount=0, preCountHandle=null,
     speechReady=false, speakHandle=null;
+/* tail = how long the ring keeps sounding. The announcement waits that out,
+   because a voice underneath a ringing bell is what makes it sound quiet. */
 var ALARM_TYPES=[
-  {id:"bell",name:"ベル"},
-  {id:"clear",name:"クリアベル"},
-  {id:"crystal",name:"クリスタル"}
+  {id:"bell",name:"ベル",tail:900},
+  {id:"clear",name:"クリアベル",tail:1250},
+  {id:"crystal",name:"クリスタル",tail:1450}
 ];
 var alarmType=load("act:alarm","bell");
 /* Older builds stored alarm ids that no longer exist; fall back to the bell. */
 if(!ALARM_TYPES.some(function(a){ return a.id===alarmType; })) alarmType="bell";
+var voiceURI=load("act:voice","");
+var speechVol=load("act:svol",1);
+var speechRate=load("act:srate",1);
+var voiceList=[];
 var draft=restoreDraft();
 
 var cloudHandle=null;
@@ -1151,6 +1167,11 @@ function helpHTML(){
    + '<dd>iPhoneの<b>横のスイッチ（消音）</b>と<b>音量</b>を確かめてください。'
    + 'それでも鳴らないときは、画面をどこか一度<b>指で触ってから</b>スタートしてください。'
    + 'iPhoneは、一度も触っていない画面では音を出さない決まりになっています。</dd>'
+   + '<dt>読み上げの声が小さい・聞き取りにくい</dt>'
+   + '<dd>右上の<b>「···」→ 読み上げ</b>で、<b>声の種類・大きさ・速さ</b>を変えられます。'
+   + '声は▶で聞き比べてから選べます。聞き取りにくいときは<b>速さを 0.8 くらいに下げる</b>と'
+   + 'はっきりします。なお100%が端末で出せる最大なので、それ以上大きくしたいときは'
+   + '<b>iPhone本体の音量</b>を上げてください。</dd>'
    + '<dt>ホーム画面に置きたい</dt>'
    + '<dd>Safariで開いて、下の<b>共有ボタン（□に↑）</b>から'
    + '<b>「ホーム画面に追加」</b>を選びます。アプリのように開けるようになります。</dd>'
@@ -1248,20 +1269,37 @@ function primeSpeech(){
     speechReady=true;
   }catch(e){}
 }
-function speak(text){
+/* The list is not ready at load in most browsers, hence onvoiceschanged. */
+function loadVoices(){
+  if(!window.speechSynthesis) return;
+  try{
+    var all=window.speechSynthesis.getVoices()||[];
+    /* Item names are Japanese, so an English voice would only mangle them. */
+    voiceList=all.filter(function(v){ return (v.lang||"").toLowerCase().indexOf("ja")===0; });
+  }catch(e){}
+}
+function pickVoice(){
+  if(!voiceURI) return null;
+  var m=voiceList.filter(function(v){ return v.voiceURI===voiceURI || v.name===voiceURI; });
+  return m.length?m[0]:null;
+}
+function speak(text,vURI){
   if(!text || !window.speechSynthesis) return;
   try{
     var sy=window.speechSynthesis;
     if(sy.speaking||sy.pending) sy.cancel();
     var u=new SpeechSynthesisUtterance(text);
-    u.lang="ja-JP"; u.rate=1; u.volume=1;
+    u.lang="ja-JP"; u.rate=speechRate; u.volume=speechVol; u.pitch=1;
+    var v=vURI ? voiceList.filter(function(x){ return x.voiceURI===vURI; })[0] : pickVoice();
+    if(v) u.voice=v;
     sy.speak(u);
   }catch(e){}
 }
-/* Let the bell ring before the name is read out, rather than over it. */
+/* Let the bell finish before the name is read out, rather than over it. */
 function announce(text){
+  var a=ALARM_TYPES.filter(function(x){ return x.id===alarmType; })[0];
   clearTimeout(speakHandle);
-  speakHandle=setTimeout(function(){ speak(text); },700);
+  speakHandle=setTimeout(function(){ speak(text); },(a&&a.tail)||900);
 }
 function stopSpeech(){
   clearTimeout(speakHandle); speakHandle=null;
@@ -1640,6 +1678,29 @@ function openSheet(){
   });
   h+='</div>';
 
+  h+='<div class="cue" style="margin-top:24px">読み上げ</div>';
+  if(voiceList.length){
+    h+='<div class="mlist">';
+    voiceList.forEach(function(v){
+      var on=voiceURI===v.voiceURI;
+      h+='<div class="mrow"><span class="mname'+(on?" cur":"")+'">'+esc(v.name)+'</span>'
+       + '<button class="mi" data-prevvoice="'+esc(v.voiceURI)+'">▶</button>'
+       + '<button class="mi'+(on?" on":"")+'" data-selvoice="'+esc(v.voiceURI)+'">✓</button></div>';
+    });
+    h+='</div>';
+  } else {
+    h+='<div class="small">この端末では声を選べません。</div>';
+  }
+  h+='<div class="vrow"><span class="vlbl">大きさ</span>'
+   + '<input type="range" id="svol" min="20" max="100" step="5" value="'+Math.round(speechVol*100)+'">'
+   + '<span class="vval" id="svolv">'+Math.round(speechVol*100)+'%</span></div>';
+  h+='<div class="vrow"><span class="vlbl">速さ</span>'
+   + '<input type="range" id="srate" min="60" max="130" step="5" value="'+Math.round(speechRate*100)+'">'
+   + '<span class="vval" id="sratev">'+speechRate.toFixed(1)+'</span></div>';
+  h+='<button class="ghost" id="tryvoice">読み上げを試す</button>';
+  h+='<div class="small" style="margin-top:10px">100%が端末で出せる最大です。'
+   + 'これより大きくしたいときは、iPhone本体の音量を上げてください。</div>';
+
   if(fbReady){
     h+='<div class="cue" style="margin-top:24px">アカウント</div>';
     if(authError) h+='<div class="warn">'+esc(authError)+'</div>';
@@ -1683,6 +1744,25 @@ function openSheet(){
     var v=document.getElementById("np").value.trim(); if(!v) return;
     presets.unshift({id:uid(),text:v,pinned:false}); persist(); openSheet();
   };
+  [].forEach.call(modal.querySelectorAll("[data-prevvoice]"),function(el){
+    el.onclick=function(){ primeSpeech(); speak("エクササイズ",el.getAttribute("data-prevvoice")); };
+  });
+  [].forEach.call(modal.querySelectorAll("[data-selvoice]"),function(el){
+    el.onclick=function(){ voiceURI=el.getAttribute("data-selvoice"); save("act:voice",voiceURI);
+      primeSpeech(); speak("エクササイズ"); openSheet(); };
+  });
+  var sv=document.getElementById("svol");
+  if(sv) sv.oninput=function(){
+    speechVol=+this.value/100; save("act:svol",speechVol);
+    document.getElementById("svolv").textContent=this.value+"%";
+  };
+  var sr=document.getElementById("srate");
+  if(sr) sr.oninput=function(){
+    speechRate=+this.value/100; save("act:srate",speechRate);
+    document.getElementById("sratev").textContent=speechRate.toFixed(1);
+  };
+  var tv=document.getElementById("tryvoice");
+  if(tv) tv.onclick=function(){ primeSpeech(); speak("エクササイズ"); };
   [].forEach.call(modal.querySelectorAll("[data-prevalarm]"),function(el){
     el.onclick=function(){ ensureAudio(); playBeep(el.getAttribute("data-prevalarm")); };
   });
@@ -1731,6 +1811,18 @@ function setTab(){
 
 restoreTimer();
 setTab();
+
+loadVoices();
+if(window.speechSynthesis){
+  /* The voices arrive after load, so refresh the picker if it is open. */
+  try{
+    window.speechSynthesis.onvoiceschanged=function(){
+      var had=voiceList.length;
+      loadVoices();
+      if(!had && voiceList.length && modal && modal.innerHTML) openSheet();
+    };
+  }catch(e){}
+}
 
 /* iOS unlocks audio only inside a real user gesture, and the alarm itself
    fires from a timer callback. Unlock on the first touch anywhere so the
