@@ -535,7 +535,7 @@ function authFailed(e){
 function adoptExisting(e){
   var cred=credFromError(e);
   if(!cred) return authFailed(e);
-  if(sessions.length && confirm("このGoogleアカウントには既に記録があります。\nこの端末の記録"+sessions.length+"件も持っていく？"))
+  if(sessions.length && confirm("このGoogleアカウントには、すでに記録が保存されています。\nこの端末にある記録"+sessions.length+"件も引き継ぎますか？"))
     pendingCarry=sessions.slice();
   firebase.auth().signInWithCredential(cred)
     .then(function(){ authDone("ログインしました"); })
@@ -560,7 +560,7 @@ function signInGoogle(){
     });
 }
 function signOutGoogle(){
-  if(!confirm("ログアウトする？\nこの端末の表示は空になるが、記録はGoogleアカウントに残っていて、次にログインすれば戻る。")) return;
+  if(!confirm("ログアウトしますか？\nこの端末の表示は空になりますが、記録はGoogleアカウントに残ります。次にログインすると元に戻ります。")) return;
   authBusy=true; signingOut=true; openSheet();
   firebase.auth().signOut().then(function(){
     /* Leave nothing behind locally, or the next anonymous account would be
@@ -725,7 +725,7 @@ function cancelEdit(){
 }
 function deleteEditing(){
   var id=editingId;
-  if(!id || !confirm("この記録を削除する？元には戻せない。")) return;
+  if(!id || !confirm("この記録を削除しますか？\n削除すると元に戻せません。")) return;
   sessions=sessions.filter(function(s){ return s.id!==id; });
   editingId=null; expanded=null;
   draft=preEditDraft||blankDraft(); preEditDraft=null;
@@ -901,7 +901,7 @@ function bindFocusControls(){
   [].forEach.call(view.querySelectorAll("[data-delp]"),function(el){
     el.onclick=function(){ var id=el.getAttribute("data-delp");
       var p=presets.filter(function(x){ return x.id===id; })[0];
-      if(!p || !confirm("「"+p.text+"」を定型から削除する？")) return;
+      if(!p || !confirm("「"+p.text+"」を削除しますか？")) return;
       presets=presets.filter(function(x){ return x.id!==id; }); persist(); render(); };
   });
   var ep=document.getElementById("editP");
@@ -1508,7 +1508,7 @@ function bindSets(){
   [].forEach.call(view.querySelectorAll("[data-idel]"),function(el){
     el.onclick=function(){
       var id=el.getAttribute("data-idel"), t=itemById(id), s=setOfItem(id);
-      if(!t || !s || !confirm("「"+t.name+"」を削除する？")) return;
+      if(!t || !s || !confirm("「"+t.name+"」を削除しますか？")) return;
       s.items=s.items.filter(function(x){ return x.id!==id; });
       delete sel[id]; persist(); render();
     };
@@ -1532,7 +1532,7 @@ function bindSets(){
   [].forEach.call(view.querySelectorAll("[data-sdel]"),function(el){
     el.onclick=function(){
       var s=setById(el.getAttribute("data-sdel"));
-      if(!s || !confirm("「"+s.name+"」を削除する？中の項目もなくなる。")) return;
+      if(!s || !confirm("「"+s.name+"」を削除しますか？\n中の項目もすべて削除されます。")) return;
       s.items.forEach(function(t){ delete sel[t.id]; });
       sets=sets.filter(function(x){ return x.id!==s.id; });
       if(activeSetId===s.id) activeSetId = sets.length?sets[0].id:null;
@@ -1726,7 +1726,7 @@ function openSheet(){
       ensureAudio(); playBeep(alarmType); openSheet(); };
   });
   document.getElementById("demo").onclick=function(){
-    if(confirm("約4か月ぶんの記録をランダムに作る？（今の記録は消して入れ替えます）")){
+    if(confirm("約4か月ぶんの記録をランダムに作りますか？\n今ある記録は消えて、入れ替わります。")){
       var s=sample();
       sessions=s; editingId=null; expanded=null; preEditDraft=null;
       draft=blankDraft(); clearDraft();
@@ -1737,14 +1737,14 @@ function openSheet(){
     }
   };
   document.getElementById("reset").onclick=function(){
-    if(confirm("メニュー・定型文・タイマー・アラーム音・記録を全て初期状態に戻す？元には戻せない。")){
+    if(confirm("すべてを初期状態に戻しますか？\nセット・意識することの言葉・アラーム音・記録がすべて消えます。元に戻せません。")){
       resetAll();
       close(); tab="record"; sub="history"; setTab(); render();
       toast("デフォルトに戻しました");
     }
   };
   document.getElementById("wipe").onclick=function(){
-    if(confirm("記録をすべて消去する？元には戻せない。")){
+    if(confirm("記録をすべて削除しますか？\n削除すると元に戻せません。")){
       sessions=[]; editingId=null; expanded=null; preEditDraft=null;
       draft=blankDraft(); clearDraft();
       persist(); cloudDeleteAllSessions();
