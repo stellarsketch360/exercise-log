@@ -546,7 +546,7 @@ function signInGoogle(){
   if(!u || authBusy) return;
   authBusy=true; authError=""; openSheet();
   u.linkWithPopup(googleProvider())
-    .then(function(){ authDone("Googleアカウントと繋がりました"); })
+    .then(function(){ authDone("Googleアカウントと連携しました"); })
     .catch(function(e){
       var c=(e&&e.code)||"";
       if(c.indexOf("credential-already-in-use")>=0) return adoptExisting(e);
@@ -587,7 +587,7 @@ if(fbReady){
     render(); if(modal && modal.innerHTML) openSheet();
   });
   firebase.auth().getRedirectResult().then(function(r){
-    if(r && r.user) toast("Googleアカウントと繋がりました");
+    if(r && r.user) toast("Googleアカウントと連携しました");
   }).catch(function(e){
     var c=(e&&e.code)||"";
     if(c.indexOf("credential-already-in-use")>=0) return adoptExisting(e);
@@ -799,7 +799,7 @@ function focusEditorHTML(){
       h+='<div class="fline"><div class="ftext">'+esc(f)+'</div>'
        + '<button class="fx" data-unfocus="'+esc(f)+'">✕</button></div>';
     });
-  } else h+='<div class="empty">エクササイズで意識することを選ぶ</div>';
+  } else h+='<div class="empty">エクササイズで意識することを選んでください。</div>';
   /* Editing swaps the chips out rather than sitting beside them — the same
      words twice over would only be confusing. */
   if(presetEditing){
@@ -809,7 +809,7 @@ function focusEditorHTML(){
        + '<button class="mi'+(p.pinned?" on":"")+'" data-pin="'+p.id+'">★</button>'
        + '<button class="mi" data-delp="'+p.id+'">🗑</button></div>';
     });
-    if(!presets.length) h+='<div class="empty">定型がまだない。</div>';
+    if(!presets.length) h+='<div class="empty">登録された言葉がまだありません。</div>';
     h+='</div>';
   } else {
     h+='<div class="chips">';
@@ -855,7 +855,7 @@ function recordHTML(){
     h+='<div class="sec"><div class="cue lbl">今日意識すること</div>';
     if(draft.focus.length){
       draft.focus.forEach(function(f){ h+='<div class="fline"><div class="ftext">'+esc(f)+'</div></div>'; });
-    } else h+='<div class="empty">まだ決めていない。</div>';
+    } else h+='<div class="empty">まだ決めていません。</div>';
     h+='<button class="ghost sm" id="backFocus">意識することを変える</button></div>';
   }
 
@@ -1047,7 +1047,7 @@ function calendarHTML(){
     var d=new Date(t.getFullYear(),t.getMonth()-i,1);
     out+=monthGrid(d.getFullYear(),d.getMonth());
   }
-  return out+'<div class="statnote">色のついた日がやった日。太い枠が今日。</div>';
+  return out+'<div class="statnote">色のついた日が、エクササイズをした日です。太い枠が今日です。</div>';
 }
 var REFLECT=[["body","体の調子"],["mind","心の調子"],["thought","思考の調子"],["comment","気づき"]];
 function firstText(s){
@@ -1063,12 +1063,12 @@ function reviewHTML(){
   h+='</div>';
 
   if(sub==="stats"){
-    if(!sessions.length) return h+'<div class="blank">記録が貯まると、ここに数字が出る。</div>';
+    if(!sessions.length) return h+'<div class="blank">記録が貯まると、ここに数字が出ます。</div>';
     var total=sessions.reduce(function(a,s){ return a+doneSec(s); },0);
     var st=streaks();
     h+='<div class="statwrap"><div class="stat"><div class="cue">続いている日数</div>'
      + '<div class="big">'+st.cur+'<span>日</span></div>'
-     + '<div class="statnote">これまでの最長 '+st.best+' 日</div></div>';
+     + '<div class="statnote">これまでの最長は '+st.best+' 日です。</div></div>';
     h+='<div class="stat"><div class="cue">カレンダー</div>'+calendarHTML()+'</div>';
     h+='<div class="stat"><div class="cue">総エクササイズ実施日</div>'
      + '<div class="big">'+activeDays(sessions)+'<span>日</span></div></div>';
@@ -1077,7 +1077,7 @@ function reviewHTML(){
     return h+'</div>';
   }
 
-  if(!sessions.length) return h+'<div class="blank">まだ記録がない。<br>「記録」で最初の一回を残そう。</div>';
+  if(!sessions.length) return h+'<div class="blank">まだ記録がありません。<br>「3 記録」から最初の一回を残してみましょう。</div>';
   var month="";
   sessions.forEach(function(s){
     var m=monthOf(s.date);
@@ -1217,7 +1217,7 @@ function helpHTML(){
    + '<b>「この記録を編集」</b>から書き直せます。削除もそこにあります。</dd>'
    + '<dt>設定はどこ</dt>'
    + '<dd>どの画面でも<b>右上の「···」</b>です。アラームの音、'
-   + 'アカウント、記録の消去がまとまっています。'
+   + 'アカウント、記録の削除がまとまっています。'
    + '意識することの言葉は<b>「1 意識」の画面</b>で編集します。</dd>'
    + '</dl>';
   return h+'</div>';
@@ -1346,7 +1346,7 @@ function timerHTML(){
     return h;
   }
   var h='<div class="cue lbl" style="margin-bottom:10px">セットを選ぶ</div>';
-  if(!sets.length) h+='<div class="blank">セットがまだない。</div>';
+  if(!sets.length) h+='<div class="blank">セットがまだありません。</div>';
   /* Every set's body is rendered, open or not, so that unfolding one is a
      class change the browser can animate instead of a rebuild. */
   sets.forEach(function(s){ h+=setCardHTML(s); });
@@ -1375,7 +1375,7 @@ function setCardHTML(s){
    + '</div><div class="setbody"><div class="setinner"><div class="setpad">'
    + '<div class="cue lbl" style="margin-bottom:6px">セット名</div>'
    + '<input class="setrename" type="text" data-sname="'+s.id+'" value="'+esc(s.name)+'">';
-  if(!s.items.length) h+='<div class="blank">下から追加しよう。</div>';
+  if(!s.items.length) h+='<div class="blank">下の欄から追加してください。</div>';
   s.items.forEach(function(t,i){
     var sel1=isSel(t.id);
     h+='<div class="edrow'+(sel1?"":" off")+'">'
@@ -1648,7 +1648,7 @@ function advanceSegment(playSound){
     timerRunning=false; timerIndex=-1; timerRunQueue=[];
     clearTimerState();
     announce("終了");
-    toast("タイマー終了");
+    toast("タイマーが終わりました");
     tab="record"; setTab(); render();   /* straight on to writing it up */
   }
 }
@@ -1693,21 +1693,21 @@ function openSheet(){
     if(authError) h+='<div class="warn">'+esc(authError)+'</div>';
     if(authName()){
       h+='<div class="acct"><span class="syncdot on"></span>'+esc(authName())+'</div>'
-       + '<div class="small">この記録はGoogleアカウントに紐づいています。別の端末でも同じアカウントでログインすれば開けます。</div>'
+       + '<div class="small">この記録はGoogleアカウントに保存されています。別の端末でも同じアカウントでログインすれば見られます。</div>'
        + '<button class="ghost" id="signout"'+(authBusy?" disabled":"")+'>ログアウト</button>';
     } else {
-      h+='<div class="small">今はこの端末にだけ紐づいています。'
-       + 'Safariのデータを消すと記録に辿り着けなくなります。<br>'
-       + 'ログインしなくてもこのまま使えます。</div>'
+      h+='<div class="small">記録は今、この端末だけに保存されています。'
+       + 'Safariのデータを消すと、記録が見られなくなります。<br>'
+       + 'ログインしなくても、このままお使いいただけます。</div>'
        + '<button class="ghost" id="signin"'+(authBusy?" disabled":"")+'>'
        + (authBusy?"接続中…":"Googleでログイン")+'</button>';
     }
   }
 
   h+='<div class="cue" style="margin-top:24px">データ</div>'
-   + '<button class="ghost" id="demo">使い込んだふうにする（テスト用）</button>'
-   + '<button class="ghost" id="reset">全てデフォルトに戻す（テスト用）</button>'
-   + '<button class="ghost" id="wipe">記録をすべて消去</button>'
+   + '<button class="ghost" id="demo">テスト用のデータを入れる</button>'
+   + '<button class="ghost" id="reset">すべて初期状態に戻す（テスト用）</button>'
+   + '<button class="ghost" id="wipe">記録をすべて削除</button>'
    + '</div></div>';
   modal.innerHTML=h;
 
@@ -1740,7 +1740,7 @@ function openSheet(){
     if(confirm("すべてを初期状態に戻しますか？\nセット・意識することの言葉・アラーム音・記録がすべて消えます。元に戻せません。")){
       resetAll();
       close(); tab="record"; sub="history"; setTab(); render();
-      toast("デフォルトに戻しました");
+      toast("初期状態に戻しました");
     }
   };
   document.getElementById("wipe").onclick=function(){
@@ -1748,7 +1748,7 @@ function openSheet(){
       sessions=[]; editingId=null; expanded=null; preEditDraft=null;
       draft=blankDraft(); clearDraft();
       persist(); cloudDeleteAllSessions();
-      close(); render(); toast("記録を消去しました");
+      close(); render(); toast("記録をすべて削除しました");
     }
   };
 }
