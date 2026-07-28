@@ -363,6 +363,7 @@ var activeSetId=load("act:activeSet",null);
 if(!setById(activeSetId)) activeSetId = sets.length ? sets[0].id : null;
 var openSetId=activeSetId;
 var tab="focus", sub="history", expanded=null, editingId=null, preEditDraft=null;
+var presetEditing=false;
 var timerRunning=false, timerPaused=false, timerIndex=-1,
     timerRemaining=0, timerEndAt=0, timerHandle=null, timerRunQueue=[], audioCtx=null, audioUnlocked=false,
     timerPrecounting=false, preCount=0, preCountHandle=null,
@@ -810,13 +811,30 @@ function focusEditorHTML(){
        + '<button class="fx" data-unfocus="'+esc(f)+'">✕</button></div>';
     });
   } else h+='<div class="empty">下の定型から選ぶか、新しく書き起こす。</div>';
-  h+='<div class="chips">';
-  sorted.forEach(function(p){
-    var on=draft.focus.indexOf(p.text)>=0;
-    h+='<button class="chip'+(on?" on":"")+'" data-focus="'+esc(p.text)+'">'+(p.pinned?"★ ":"")+esc(p.text)+'</button>';
-  });
-  h+='</div><div class="addrow"><input type="text" id="nf" placeholder="新しく書く…">'
-   + '<button class="add" id="addF">＋ 追加</button></div></div>';
+  /* Editing swaps the chips out rather than sitting beside them — the same
+     words twice over would only be confusing. */
+  if(presetEditing){
+    h+='<div class="mlist">';
+    sorted.forEach(function(p){
+      h+='<div class="mrow"><span class="mname s">'+esc(p.text)+'</span>'
+       + '<button class="mi'+(p.pinned?" on":"")+'" data-pin="'+p.id+'">★</button>'
+       + '<button class="mi" data-delp="'+p.id+'">🗑</button></div>';
+    });
+    if(!presets.length) h+='<div class="empty">定型がまだない。</div>';
+    h+='</div>';
+  } else {
+    h+='<div class="chips">';
+    sorted.forEach(function(p){
+      var on=draft.focus.indexOf(p.text)>=0;
+      h+='<button class="chip'+(on?" on":"")+'" data-focus="'+esc(p.text)+'">'+(p.pinned?"★ ":"")+esc(p.text)+'</button>';
+    });
+    h+='</div>';
+  }
+  h+='<div class="addrow"><input type="text" id="nf" placeholder="'
+   + (presetEditing?"定型を追加…":"新しく書く…")+'">'
+   + '<button class="add" id="addF">＋ 追加</button></div>'
+   + '<button class="ghost sm" id="editP" style="margin-top:10px">'+(presetEditing?"編集を終える":"定型を編集")+'</button>'
+   + '</div>';
   return h;
 }
 
@@ -884,6 +902,19 @@ function bindFocusControls(){
   if(a) a.onclick=addFocus;
   var n=document.getElementById("nf");
   if(n) n.onkeydown=function(e){ if(e.key==="Enter") addFocus(); };
+  [].forEach.call(view.querySelectorAll("[data-pin]"),function(el){
+    el.onclick=function(){ var id=el.getAttribute("data-pin");
+      presets=presets.map(function(p){ return p.id===id?{id:p.id,text:p.text,pinned:!p.pinned}:p; });
+      persist(); render(); };
+  });
+  [].forEach.call(view.querySelectorAll("[data-delp]"),function(el){
+    el.onclick=function(){ var id=el.getAttribute("data-delp");
+      var p=presets.filter(function(x){ return x.id===id; })[0];
+      if(!p || !confirm("「"+p.text+"」を定型から削除する？")) return;
+      presets=presets.filter(function(x){ return x.id!==id; }); persist(); render(); };
+  });
+  var ep=document.getElementById("editP");
+  if(ep) ep.onclick=function(){ presetEditing=!presetEditing; render(); };
 }
 function bindFocus(){
   bindFocusControls();
@@ -921,7 +952,9 @@ function addFocus(){
   if(!presets.some(function(p){ return p.text===t; })){
     presets.unshift({id:uid(),text:t,pinned:false}); persist();
   }
-  if(draft.focus.indexOf(t)<0) draft.focus.push(t);
+  /* While editing the list, adding means adding a template — not picking it
+     for today. */
+  if(!presetEditing && draft.focus.indexOf(t)<0) draft.focus.push(t);
   el.value=""; saveDraft(); render();
 }
 
@@ -1130,6 +1163,8 @@ function helpHTML(){
    + '「オープン」「周りを見る」のように、<b>今日のエクササイズで心がけたいこと</b>を選びます。</p>'
    + '<ul><li>並んでいる言葉を<b>押すと選べます</b>。もう一度押すと外れます。</li>'
    + '<li>新しい言葉は、下の入力欄に打って「＋ 追加」を押すと増やせます。</li>'
+   + '<li><b>「定型を編集」</b>を押すと、よく使う言葉に★を付けて先頭に出したり、'
+   + 'いらない言葉を消したりできます。</li>'
    + '<li>思いつかない日は、何も選ばずに次へ進んでかまいません。</li></ul>'
    + '<p>決まったら、下の<b>「タイマーへ →」</b>を押します。</p>';
 
@@ -1194,8 +1229,9 @@ function helpHTML(){
    + '<dd>「まとめ」→「履歴」で直したい日を押し、'
    + '<b>「この記録を編集」</b>から書き直せます。削除もそこにあります。</dd>'
    + '<dt>設定はどこ</dt>'
-   + '<dd>どの画面でも<b>右上の「···」</b>です。意識することの言葉、アラームの音、'
-   + 'アカウント、記録の消去がまとまっています。</dd>'
+   + '<dd>どの画面でも<b>右上の「···」</b>です。アラームの音、読み上げ、'
+   + 'アカウント、記録の消去がまとまっています。'
+   + '意識することの言葉は<b>「1 意識」の画面</b>で編集します。</dd>'
    + '</dl>';
   return h+'</div>';
 }
@@ -1668,19 +1704,10 @@ document.getElementById("gear").onclick=openSheet;
 
 function openSheet(){
   var h='<div class="scrim" id="scrim"><div class="sheet" id="sheet">'
-   + '<div class="sheethead"><div class="sheettitle">項目を編集</div>'
+   + '<div class="sheethead"><div class="sheettitle">設定</div>'
    + '<button class="ico x" id="close">✕</button></div>';
 
-  h+='<div class="cue">意識することの定型</div><div class="mlist">';
-  presets.slice().sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0); }).forEach(function(p){
-    h+='<div class="mrow"><span class="mname s">'+esc(p.text)+'</span>'
-     + '<button class="mi'+(p.pinned?" on":"")+'" data-pin="'+p.id+'">★</button>'
-     + '<button class="mi" data-delp="'+p.id+'">🗑</button></div>';
-  });
-  h+='</div><div class="addrow"><input type="text" id="np" placeholder="定型を追加…">'
-   + '<button class="add" id="addP">＋ 追加</button></div>';
-
-  h+='<div class="cue" style="margin-top:24px">アラーム音</div><div class="mlist">';
+  h+='<div class="cue">アラーム音</div><div class="mlist">';
   ALARM_TYPES.forEach(function(a){
     var on=alarmType===a.id;
     h+='<div class="mrow"><span class="mname'+(on?" cur":"")+'">'+esc(a.name)+'</span>'
@@ -1742,19 +1769,6 @@ function openSheet(){
   var so=document.getElementById("signout");
   if(so) so.onclick=signOutGoogle;
 
-  [].forEach.call(modal.querySelectorAll("[data-pin]"),function(el){
-    el.onclick=function(){ var id=el.getAttribute("data-pin");
-      presets=presets.map(function(p){ return p.id===id?{id:p.id,text:p.text,pinned:!p.pinned}:p; });
-      persist(); openSheet(); };
-  });
-  [].forEach.call(modal.querySelectorAll("[data-delp]"),function(el){
-    el.onclick=function(){ var id=el.getAttribute("data-delp");
-      presets=presets.filter(function(x){ return x.id!==id; }); persist(); openSheet(); };
-  });
-  document.getElementById("addP").onclick=function(){
-    var v=document.getElementById("np").value.trim(); if(!v) return;
-    presets.unshift({id:uid(),text:v,pinned:false}); persist(); openSheet();
-  };
   [].forEach.call(modal.querySelectorAll("[data-prevvoice]"),function(el){
     el.onclick=function(){ primeSpeech(); speak("エクササイズ",el.getAttribute("data-prevvoice")); };
   });
