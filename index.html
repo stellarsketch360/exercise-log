@@ -830,8 +830,7 @@ function focusEditorHTML(){
     });
     h+='</div>';
   }
-  h+='<div class="addrow"><input type="text" id="nf" placeholder="'
-   + (presetEditing?"定型を追加…":"新しく書く…")+'">'
+  h+='<div class="addrow"><input type="text" id="nf" placeholder="新しく書く…">'
    + '<button class="add" id="addF">＋ 追加</button></div>'
    + '<button class="ghost sm" id="editP" style="margin-top:10px">'+(presetEditing?"編集を終える":"定型を編集")+'</button>'
    + '</div>';
@@ -952,9 +951,7 @@ function addFocus(){
   if(!presets.some(function(p){ return p.text===t; })){
     presets.unshift({id:uid(),text:t,pinned:false}); persist();
   }
-  /* While editing the list, adding means adding a template — not picking it
-     for today. */
-  if(!presetEditing && draft.focus.indexOf(t)<0) draft.focus.push(t);
+  if(draft.focus.indexOf(t)<0) draft.focus.push(t);
   el.value=""; saveDraft(); render();
 }
 
