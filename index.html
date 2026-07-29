@@ -2,7 +2,9 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- Zoom is switched off on purpose: the app is used mid-exercise, and a stray
+     touch that left the page zoomed in was hard to undo with one hand. -->
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>エクササイズ ─ Daily Training Log</title>
 <style>
   :root{
@@ -13,8 +15,11 @@
     --mono:ui-monospace,"SF Mono",Menlo,monospace;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  /* manipulation drops the double-tap-to-zoom gesture, which is what a mistouch
+     usually triggers; text-size-adjust stops Safari resizing text on rotate. */
+  html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
   body{margin:0;background:var(--house);color:var(--ink);font-family:var(--sans);
-    min-height:100vh;-webkit-font-smoothing:antialiased;}
+    min-height:100vh;-webkit-font-smoothing:antialiased;touch-action:manipulation;}
   .wrap{max-width:600px;margin:0 auto;padding:28px 18px 110px;}
   .cue{font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);}
   h1{font-family:var(--serif);font-size:30px;letter-spacing:.04em;margin:2px 0 0;font-weight:500;}
@@ -35,9 +40,11 @@
   .sec{margin-bottom:26px;}
   .lbl{margin-bottom:10px;}
   .row{display:flex;gap:12px;}
+  /* 16px is the threshold below which iOS Safari zooms the page in when a field
+     is focused — and it will not zoom back out. Every field is at or above it. */
   input[type=date],input[type=time],input[type=text],input[type=number],textarea{
     width:100%;background:var(--card);border:1px solid var(--line);color:var(--ink);
-    border-radius:10px;padding:11px 12px;font-family:var(--sans);font-size:14px;outline:none;}
+    border-radius:10px;padding:11px 12px;font-family:var(--sans);font-size:16px;outline:none;}
   input:focus,textarea:focus{border-color:var(--red);}
   input[type=date],input[type=time],input[type=number]{font-family:var(--mono);}
   textarea{resize:vertical;min-height:70px;line-height:1.6;}
@@ -60,15 +67,18 @@
   .add{background:var(--red);color:#fff;border:none;border-radius:10px;padding:0 16px;
     font-family:var(--mono);font-size:12px;cursor:pointer;white-space:nowrap;}
   .add:hover{background:var(--red2);}
+  /* The record screen only reports what the timer already ticked off, so these
+     rows are read-only — no checkbox to press a second time. */
   .ex{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card);}
-  .exrow{padding:13px 14px;border-bottom:1px solid var(--line);}
+  .exrow{display:flex;align-items:center;gap:10px;padding:13px 14px;border-bottom:1px solid var(--line);}
   .exrow:last-child{border-bottom:none;}
   .exrow.done{background:rgba(158,58,70,.04);}
-  .exhead{display:flex;align-items:center;gap:12px;cursor:pointer;}
+  .exrow.skip{color:var(--dim);}
   .box{width:22px;height:22px;border:1.5px solid var(--line);border-radius:6px;flex:0 0 auto;
     display:grid;place-items:center;color:transparent;font-size:13px;font-weight:700;}
   .box.on{background:var(--red);border-color:var(--red);color:#fff;}
-  .exname{flex:1;font-size:14.5px;}
+  .exname{flex:1;min-width:0;font-size:14.5px;}
+  .exsec{flex:0 0 auto;font-family:var(--mono);font-size:11px;color:var(--dim);}
   .savebar{position:fixed;left:0;right:0;bottom:0;padding:14px 18px calc(14px + env(safe-area-inset-bottom));
     background:linear-gradient(to top,var(--house) 62%,transparent);}
   .save{max-width:600px;margin:0 auto;display:block;width:100%;background:var(--red);color:#fff;
@@ -200,7 +210,7 @@
   .setinner{overflow:hidden;min-height:0;}
   .setpad{padding:0 14px 16px;}
   .setrename{margin-bottom:12px;}
-  .setcard input.setrename{width:100%;font-size:13px;}
+  .setcard input.setrename{width:100%;}
   .setdel{width:100%;margin-top:14px;}
   .edrow{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--house);}
   .edrow.off{opacity:.5;}
@@ -209,7 +219,7 @@
   .edrow input.edname{width:100%;min-width:0;flex:1;}
   .edtime{display:flex;align-items:center;gap:5px;}
   .edtime span{font-family:var(--mono);font-size:11px;color:var(--dim);flex:0 0 auto;}
-  .edrow input.ednum{width:58px;min-width:0;flex:0 0 auto;text-align:center;padding:9px 4px;}
+  .edrow input.ednum{width:62px;min-width:0;flex:0 0 auto;text-align:center;padding:9px 4px;}
   .edtime .mi{flex:0 0 auto;padding:4px 2px;}
   .edtime .sp{flex:1 1 auto;}
   .ghost.next{margin-top:22px;border-color:var(--red);color:var(--red);}
@@ -225,6 +235,13 @@
     box-shadow:0 4px 14px rgba(43,38,34,.2);}
   .warn{background:#FBF3E7;border:1px solid #E8D6B8;color:#7A5B22;border-radius:9px;padding:10px 12px;
     font-size:12px;line-height:1.6;margin-bottom:18px;font-family:var(--mono);}
+  .promo{border:1px solid var(--red);border-radius:12px;background:var(--card);padding:15px 16px;
+    margin-bottom:22px;
+    background-image:radial-gradient(130% 90% at 15% 0%,rgba(158,58,70,.08),transparent 62%);}
+  .promotitle{font-family:var(--serif);font-size:17px;margin-bottom:8px;}
+  .promotext{font-size:13px;line-height:1.75;color:var(--dim);}
+  .promorow{display:flex;align-items:center;gap:10px;margin-top:14px;}
+  .promorow .add{padding:11px 16px;}
   .acct{display:flex;align-items:center;font-family:var(--mono);font-size:12px;color:var(--ink);
     background:var(--house);border:1px solid var(--line);border-radius:9px;padding:11px 12px;
     margin-bottom:8px;word-break:break-all;}
@@ -525,10 +542,14 @@ function credFromError(e){
   if(e && e.credential) return e.credential;
   try{ return firebase.auth.GoogleAuthProvider.credentialFromError(e); }catch(err){ return null; }
 }
+/* Rebuilds the settings sheet in place, but only when it is the thing on
+   screen — sign-in can also be started from the prompt on the 意識 screen, and
+   that must not make the settings sheet appear out of nowhere. */
+function refreshSheet(){ if(modal && modal.innerHTML) openSheet(); }
 function authDone(msg){
   authBusy=false; authError="";
   if(msg) toast(msg);
-  render(); if(modal && modal.innerHTML) openSheet();
+  render(); refreshSheet();
 }
 function authFailed(e){
   authBusy=false;
@@ -537,7 +558,7 @@ function authFailed(e){
     : c.indexOf("operation-not-allowed")>=0 ? "FirebaseでGoogleログインが有効になっていません。"
     : c.indexOf("unauthorized-domain")>=0 ? "このドメインがFirebaseで許可されていません。"
     : "ログインできませんでした。"+(c?"（"+c+"）":"");
-  render(); if(modal && modal.innerHTML) openSheet();
+  render(); refreshSheet();
 }
 /* The Google account is already in use, i.e. it was signed into on another
    device. That account's records are the real ones; this device's anonymous
@@ -554,7 +575,7 @@ function adoptExisting(e){
 function signInGoogle(){
   var u=firebase.auth().currentUser;
   if(!u || authBusy) return;
-  authBusy=true; authError=""; openSheet();
+  authBusy=true; authError=""; render(); refreshSheet();
   u.linkWithPopup(googleProvider())
     .then(function(){ authDone("Googleアカウントと連携しました"); })
     .catch(function(e){
@@ -571,7 +592,7 @@ function signInGoogle(){
 }
 function signOutGoogle(){
   if(!confirm("ログアウトしますか？\nこの端末の表示は空になりますが、記録はGoogleアカウントに残ります。次にログインすると元に戻ります。")) return;
-  authBusy=true; signingOut=true; openSheet();
+  authBusy=true; signingOut=true; render(); refreshSheet();
   firebase.auth().signOut().then(function(){
     /* Leave nothing behind locally, or the next anonymous account would be
        created as a copy of the account just left. Wiping has to finish before
@@ -594,7 +615,7 @@ if(fbReady){
     /* Signing out drops straight back to an anonymous account so the app
        keeps working without anybody logging in. */
     else if(!signingOut) firebase.auth().signInAnonymously().catch(syncFailed);
-    render(); if(modal && modal.innerHTML) openSheet();
+    render(); refreshSheet();
   });
   firebase.auth().getRedirectResult().then(function(r){
     if(r && r.user) toast("Googleアカウントと連携しました");
@@ -642,8 +663,19 @@ function allItems(){
 function isSel(id){ return sel[id]!==false; }
 function selectedItems(){ return activeItems().filter(function(t){ return isSel(t.id); }); }
 function blankDraft(){
-  return {date:today(),time:now(),done:{},notes:{},focus:[],comment:"",
-    body:"",mind:"",thought:""};
+  return {date:today(),time:now(),done:{},notes:{},focus:[],next:[],comment:"",cond:""};
+}
+/* 体・心・声呼吸 used to be three separate boxes. They are one now, so anything
+   written in the old three is folded into it. */
+function mergeCond(o){
+  if(o.cond) return o.cond;
+  return [o.body,o.mind,o.thought].filter(function(x){ return x; }).join("\n");
+}
+function normDraft(d){
+  d.done=d.done||{}; d.notes=d.notes||{}; d.focus=d.focus||[]; d.next=d.next||[];
+  d.comment=d.comment||""; d.cond=mergeCond(d);
+  delete d.body; delete d.mind; delete d.thought;
+  return d;
 }
 /* The flow spans three screens with a workout in between, so an unsaved
    draft is kept on disk. Yesterday's leftovers are discarded. */
@@ -651,7 +683,7 @@ function saveDraft(){ if(!editingId) save("act:draft",draft); }
 function clearDraft(){ save("act:draft",null); }
 function restoreDraft(){
   var d=load("act:draft",null);
-  return (d && d.date===today()) ? d : blankDraft();
+  return (d && d.date===today()) ? normDraft(d) : blankDraft();
 }
 function findSession(id){
   var m=sessions.filter(function(s){ return s.id===id; });
@@ -669,6 +701,13 @@ function menuItems(){
   });
   return list;
 }
+/* Records written before durations were kept carry no sec; fall back to what
+   the item is set to now, and to nothing if it has since been deleted. */
+function draftSec(e){
+  if(typeof e.sec==="number") return e.sec;
+  var cur=itemById(e.id);
+  return cur?cur.sec:0;
+}
 function startEdit(id){
   var s=findSession(id);
   if(!s) return;
@@ -677,7 +716,7 @@ function startEdit(id){
   var done={}, notes={};
   s.items.forEach(function(i){ done[i.exId]=!!i.done; if(i.note) notes[i.exId]=i.note; });
   draft={date:s.date,time:s.time,done:done,notes:notes,focus:(s.focus||[]).slice(),
-    comment:s.comment||"",body:s.body||"",mind:s.mind||"",thought:s.thought||""};
+    next:(s.next||[]).slice(),comment:s.comment||"",cond:mergeCond(s)};
   expanded=null; tab="record"; setTab(); render();
   window.scrollTo(0,0);
 }
@@ -699,8 +738,8 @@ function deleteEditing(){
 }
 function hasContent(){
   var any=false; for(var k in draft.done){ if(draft.done[k]) any=true; }
-  return any || draft.focus.length>0 || draft.comment.trim()!==""
-    || draft.body.trim()!=="" || draft.mind.trim()!=="" || draft.thought.trim()!=="";
+  return any || draft.focus.length>0 || draft.next.length>0
+    || draft.comment.trim()!=="" || draft.cond.trim()!=="";
 }
 
 /* Identifies a field well enough to find its replacement after a rebuild. */
@@ -746,8 +785,19 @@ function render(){
   restoreFocus(fkey,fs,fe);
 }
 
+/* LINE and the like open links in a stripped-down browser of their own: the
+   alarm often stays silent, the Google sign-in window cannot open, and what is
+   saved there is thrown away when the app closes. */
+function inAppBrowser(){
+  var ua=navigator.userAgent||"";
+  return /\bLine\//i.test(ua) || /FBAN|FBAV|FB_IAB/i.test(ua) || /Instagram/i.test(ua)
+    || /KAKAOTALK/i.test(ua) || /MicroMessenger/i.test(ua);
+}
 function statusHTML(){
   var h="";
+  if(inAppBrowser()) h+='<div class="warn">LINEなどのアプリの中で開いています。'
+   + 'このままだと音が鳴らなかったり、記録が消えたりすることがあります。'
+   + 'SafariやChromeで開き直してください。</div>';
   if(!canStore) h+='<div class="warn">このプレビューでは保存できません。HTMLファイルをブラウザで開けば記録は端末に保存されます。</div>';
   if(!fbReady) h+='<div class="warn">Firebase未設定：今はこの端末にのみ保存されています。設定すると全端末で同期されます。</div>';
   else if(syncError) h+='<div class="warn">'+esc(syncError)+'<br>記録はこの端末には保存されています。</div>';
@@ -770,8 +820,9 @@ function focusEditorHTML(){
     h+='<div class="mlist">';
     sorted.forEach(function(p){
       h+='<div class="mrow"><span class="mname s">'+esc(p.text)+'</span>'
-       + '<button class="mi'+(p.pinned?" on":"")+'" data-pin="'+p.id+'">★</button>'
-       + '<button class="mi" data-delp="'+p.id+'">🗑</button></div>';
+       + '<button class="mi'+(p.pinned?" on":"")+'" data-pin="'+p.id+'" aria-label="よく使う">★</button>'
+       + '<button class="mi" data-editp="'+p.id+'" aria-label="編集">✎</button>'
+       + '<button class="mi" data-delp="'+p.id+'" aria-label="削除">🗑</button></div>';
     });
     if(!presets.length) h+='<div class="empty">登録された言葉がまだありません。</div>';
     h+='</div>';
@@ -793,9 +844,25 @@ function focusEditorHTML(){
   return h;
 }
 
+/* Shown on the screen the app opens on, until Google is linked or it is waved
+   away. An anonymous account lives only in this browser's storage, and there is
+   no way back into it once that is cleared — which is the whole reason to ask. */
+function googlePromoHTML(){
+  if(!fbReady || !authUser || !authUser.isAnonymous) return "";
+  if(load("act:promo",false)) return "";
+  return '<div class="promo"><div class="promotitle">Googleと連携しておきましょう</div>'
+   + '<div class="promotext">記録は今、この端末の中だけにあります。'
+   + 'ブラウザのデータを消したり、機種を変えたりすると、これまでの記録は戻せません。<br>'
+   + '連携しておけば、今ある記録はそのまま引き継がれ、'
+   + '別の端末からも同じ記録が見られるようになります。</div>'
+   + '<div class="promorow"><button class="add" id="promoYes"'+(authBusy?" disabled":"")+'>'
+   + (authBusy?"接続中…":"Googleと連携する")+'</button>'
+   + '<button class="ghost sm" id="promoNo">あとで</button></div></div>';
+}
+
 /* Step 1 — decide what to hold in mind today. */
 function focusHTML(){
-  return statusHTML()
+  return statusHTML() + googlePromoHTML()
    + '<div class="sec"><div class="cue lbl">今日意識すること</div>'+focusEditorHTML()+'</div>'
    + '<button class="ghost next" id="toTimer">タイマーへ →</button>';
 }
@@ -823,22 +890,40 @@ function recordHTML(){
     h+='<button class="ghost sm" id="backFocus">意識することを変える</button></div>';
   }
 
-  h+='<div class="sec"><div class="cue lbl">今日の項目</div><div class="ex">';
-  menuItems().forEach(function(e){
-    var on=!!draft.done[e.id];
-    h+='<div class="exrow'+(on?" done":"")+'">'
-     + '<div class="exhead" data-toggle="'+e.id+'"><div class="box'+(on?" on":"")+'">✓</div>'
-     + '<div class="exname">'+esc(e.name)+'</div></div>'
-     + '</div>';
-  });
-  h+='</div></div>';
+  /* Read-only: what is ticked here was ticked by the timer as each item ran. */
+  h+='<div class="sec"><div class="cue lbl">今日の項目</div>';
+  var mi=menuItems();
+  if(!mi.length) h+='<div class="empty">タイマーを動かすと、終えた項目がここに出ます。</div>';
+  else {
+    h+='<div class="ex">';
+    mi.forEach(function(e){
+      var on=!!draft.done[e.id];
+      h+='<div class="exrow'+(on?" done":" skip")+'">'
+       + '<div class="exname">'+esc(e.name)+'</div>'
+       + '<div class="exsec">'+(on?fmtDur(draftSec(e)):"していません")+'</div>'
+       + '</div>';
+    });
+    h+='</div>';
+  }
+  h+='</div>';
 
-  h+='<div class="sec"><div class="cue lbl">体の調子</div>'
-   + '<textarea id="bd" placeholder="今の体の感覚…">'+esc(draft.body)+'</textarea></div>';
-  h+='<div class="sec"><div class="cue lbl">心の調子</div>'
-   + '<textarea id="md" placeholder="今の心の状態…">'+esc(draft.mind)+'</textarea></div>';
-  h+='<div class="sec"><div class="cue lbl">思考の調子</div>'
-   + '<textarea id="th" placeholder="今の思考の状態…">'+esc(draft.thought)+'</textarea></div>';
+  h+='<div class="sec"><div class="cue lbl">体の調子・心の調子・声呼吸の調子</div>'
+   + '<textarea id="cd" placeholder="今の体・心・声呼吸の感じ…" style="min-height:120px">'
+   + esc(draft.cond)+'</textarea></div>';
+
+  h+='<div class="sec"><div class="cue lbl">次回、意識したいこと</div><div class="spot">';
+  if(draft.next.length){
+    draft.next.forEach(function(t,i){
+      h+='<div class="fline"><div class="ftext">'+esc(t)+'</div>'
+       + '<button class="fx" data-nedit="'+i+'" aria-label="編集">✎</button>'
+       + '<button class="fx" data-ndel="'+i+'" aria-label="削除">🗑</button></div>';
+    });
+  } else h+='<div class="empty">次にやるとき意識したいことを、思いついたら書いておきましょう。</div>';
+  h+='<div class="addrow"><input type="text" id="nn" placeholder="次回、意識したいこと…">'
+   + '<button class="add" id="addN">＋ 追加</button></div>'
+   + '<div class="small" style="margin:10px 0 0">書いた言葉は「1 意識」の先頭に並びます。</div>'
+   + '</div></div>';
+
   h+='<div class="sec"><div class="cue lbl">気づき</div>'
    + '<textarea id="cm" placeholder="気づきなど…">'+esc(draft.comment)+'</textarea></div>';
 
@@ -862,10 +947,26 @@ function bindFocusControls(){
       presets=presets.map(function(p){ return p.id===id?{id:p.id,text:p.text,pinned:!p.pinned}:p; });
       persist(); render(); };
   });
+  /* Both of these edit the list of words to choose from, never the records —
+     each saved record holds its own copy of the words used that day. */
+  [].forEach.call(view.querySelectorAll("[data-editp]"),function(el){
+    el.onclick=function(){ var id=el.getAttribute("data-editp");
+      var p=presets.filter(function(x){ return x.id===id; })[0];
+      if(!p) return;
+      var t=prompt("意識すること",p.text);
+      if(t==null) return;
+      t=t.trim(); if(!t || t===p.text) return;
+      var old=p.text;
+      presets=presets.map(function(x){ return x.id===id?{id:x.id,text:t,pinned:x.pinned}:x; });
+      /* Keep whatever is picked for today, and any 次回 line, pointing at it. */
+      draft.focus=draft.focus.map(function(f){ return f===old?t:f; });
+      draft.next=draft.next.map(function(f){ return f===old?t:f; });
+      persist(); saveDraft(); render(); };
+  });
   [].forEach.call(view.querySelectorAll("[data-delp]"),function(el){
     el.onclick=function(){ var id=el.getAttribute("data-delp");
       var p=presets.filter(function(x){ return x.id===id; })[0];
-      if(!p || !confirm("「"+p.text+"」を削除しますか？")) return;
+      if(!p || !confirm("「"+p.text+"」を削除しますか？\n保存済みの記録はそのまま残ります。")) return;
       presets=presets.filter(function(x){ return x.id!==id; }); persist(); render(); };
   });
   var ep=document.getElementById("editP");
@@ -873,19 +974,25 @@ function bindFocusControls(){
 }
 function bindFocus(){
   bindFocusControls();
+  var py=document.getElementById("promoYes");
+  if(py) py.onclick=signInGoogle;
+  var pn=document.getElementById("promoNo");
+  if(pn) pn.onclick=function(){ save("act:promo",true); render(); };
   document.getElementById("toTimer").onclick=function(){ tab="timer"; setTab(); render(); };
 }
 function bindRecord(){
   document.getElementById("d").onchange=function(){ draft.date=this.value; saveDraft(); };
   document.getElementById("t").onchange=function(){ draft.time=this.value; saveDraft(); };
-  document.getElementById("bd").oninput=function(){ draft.body=this.value; saveBtn.disabled=!hasContent(); saveDraft(); };
-  document.getElementById("md").oninput=function(){ draft.mind=this.value; saveBtn.disabled=!hasContent(); saveDraft(); };
-  document.getElementById("th").oninput=function(){ draft.thought=this.value; saveBtn.disabled=!hasContent(); saveDraft(); };
+  document.getElementById("cd").oninput=function(){ draft.cond=this.value; saveBtn.disabled=!hasContent(); saveDraft(); };
   document.getElementById("cm").oninput=function(){ draft.comment=this.value; saveBtn.disabled=!hasContent(); saveDraft(); };
 
-  [].forEach.call(view.querySelectorAll("[data-toggle]"),function(el){
-    el.onclick=function(){ var id=el.getAttribute("data-toggle");
-      draft.done[id]=!draft.done[id]; saveDraft(); render(); };
+  document.getElementById("addN").onclick=addNext;
+  document.getElementById("nn").onkeydown=function(e){ if(e.key==="Enter") addNext(); };
+  [].forEach.call(view.querySelectorAll("[data-nedit]"),function(el){
+    el.onclick=function(){ editNext(+el.getAttribute("data-nedit")); };
+  });
+  [].forEach.call(view.querySelectorAll("[data-ndel]"),function(el){
+    el.onclick=function(){ delNext(+el.getAttribute("data-ndel")); };
   });
   bindFocusControls();
   var bf=document.getElementById("backFocus");
@@ -901,14 +1008,49 @@ function toggleFocus(t){
   if(i>=0) draft.focus.splice(i,1); else draft.focus.push(t);
   saveDraft(); render();
 }
+/* New words go to the front so the most recent thought is the first one seen
+   on the 意識 screen next time. */
+function addPreset(t){
+  if(presets.some(function(p){ return p.text===t; })) return;
+  presets.unshift({id:uid(),text:t,pinned:false}); persist();
+}
 function addFocus(){
   var el=document.getElementById("nf"); var t=el.value.trim();
   if(!t) return;
-  if(!presets.some(function(p){ return p.text===t; })){
-    presets.unshift({id:uid(),text:t,pinned:false}); persist();
-  }
+  addPreset(t);
   if(draft.focus.indexOf(t)<0) draft.focus.push(t);
   el.value=""; saveDraft(); render();
+}
+
+/* 次回、意識したいこと — written at the end of a session, and carried over to
+   the 意識 screen so the next session opens on it. */
+function addNext(){
+  var el=document.getElementById("nn"), t=el.value.trim();
+  if(!t) return;
+  if(draft.next.indexOf(t)<0) draft.next.push(t);
+  addPreset(t);
+  el.value=""; saveDraft(); render();
+}
+/* Renaming or deleting only touches the list of words to choose from. Every
+   saved record keeps its own copy of what was written that day, so nothing
+   already recorded changes. */
+function editNext(i){
+  var old=draft.next[i];
+  if(old==null) return;
+  var t=prompt("次回、意識したいこと",old);
+  if(t==null) return;
+  t=t.trim(); if(!t || t===old) return;
+  draft.next[i]=t;
+  presets=presets.map(function(p){ return p.text===old?{id:p.id,text:t,pinned:p.pinned}:p; });
+  persist(); saveDraft(); render();
+}
+function delNext(i){
+  var t=draft.next[i];
+  if(t==null) return;
+  if(!confirm("「"+t+"」を消しますか？\n保存済みの記録はそのまま残ります。")) return;
+  draft.next.splice(i,1);
+  presets=presets.filter(function(p){ return p.text!==t; });
+  persist(); saveDraft(); render();
 }
 
 saveBtn.onclick=function(){
@@ -922,8 +1064,8 @@ saveBtn.onclick=function(){
   });
   var editing=!!editingId;
   var session={id:editingId||uid(),date:draft.date,time:draft.time,items:recItems,
-    focus:draft.focus.slice(),comment:draft.comment.trim(),
-    body:draft.body.trim(),mind:draft.mind.trim(),thought:draft.thought.trim()};
+    focus:draft.focus.slice(),next:draft.next.slice(),
+    comment:draft.comment.trim(),cond:draft.cond.trim()};
   if(editing){
     /* The date may have moved, so restore newest-first order. */
     sessions=sessions.map(function(s){ return s.id===session.id?session:s; })
@@ -1029,7 +1171,10 @@ function calendarHTML(){
   }
   return out;
 }
-var REFLECT=[["body","体の調子"],["mind","心の調子"],["thought","思考の調子"],["comment","気づき"]];
+/* The first three are what records written before the three boxes were merged
+   still carry; they are only ever read, never written again. */
+var REFLECT=[["body","体の調子"],["mind","心の調子"],["thought","思考の調子"],
+  ["cond","体の調子・心の調子・声呼吸の調子"],["comment","気づき"]];
 function firstText(s){
   for(var i=REFLECT.length-1;i>=0;i--){ if(s[REFLECT[i][0]]) return s[REFLECT[i][0]]; }
   return "";
@@ -1096,6 +1241,13 @@ function reviewHTML(){
         h+='<div class="csec"><div class="clbl">'+f[1]+'</div>'
          + '<div class="ctext">'+esc(s[f[0]])+'</div></div>';
       });
+      /* Kept on the record itself, so removing the word from the 意識 list
+         later never rubs out what was written on the day. */
+      if((s.next||[]).length){
+        h+='<div class="csec"><div class="clbl">次回、意識したいこと</div>';
+        s.next.forEach(function(f){ h+='<div class="cfocus">'+esc(f)+'</div>'; });
+        h+='</div>';
+      }
       h+='<div class="cedit"><button class="ghost sm" data-edit="'+s.id+'">この記録を編集</button></div>';
       h+='</div>';
     }
@@ -1124,6 +1276,16 @@ function picTabs(on){
 
 function helpHTML(){
   var h='<div class="help">';
+  /* The first thing anyone reads, because opening it in the wrong place is the
+     one mistake that makes everything below it behave oddly. */
+  h+='<p class="hlead"><b>SafariやChromeなど、ブラウザのアプリで開いてください。</b><br>'
+   + 'LINEやInstagramなどのメッセージアプリの中にも簡易的なブラウザがありますが、'
+   + 'そちらで開くと、音が鳴らない・Googleと連携できない・書いた記録が消えてしまう、'
+   + 'といったことが起こります。<br>'
+   + 'そのようなアプリからこのページを開いてしまったときは、'
+   + '画面の右上か右下にあるメニューから<b>「Safariで開く」「ブラウザで開く」</b>'
+   + '（Androidは<b>「Chromeで開く」</b>）を選んでください。'
+   + '一度ホーム画面に置いてしまえば、次からは迷わず開けます（下の「その他」をご覧ください）。</p>';
   h+='<p class="hlead">このアプリは、エクササイズを<b>「決める → 測る → 書く」</b>の順で'
    + '毎日くりかえすためのものです。</p>';
 
@@ -1132,8 +1294,9 @@ function helpHTML(){
   h+='<p>アプリを開くと、まずこの画面になります。今日のエクササイズで意識したいことを選びます。</p>'
    + '<ul><li>並んでいる言葉を押すと選べます。もう一度押すと外れます。</li>'
    + '<li>新しい言葉は、下の入力欄に打って「＋ 追加」を押すと増やせます。</li>'
-   + '<li><b>「編集・削除」</b>を押すと、よく使う言葉に★を付けて先頭に出したり、'
-   + 'いらない言葉を消したりできます。</li>'
+   + '<li><b>「編集・削除」</b>を押すと、よく使う言葉に<b>★</b>を付けて先頭に出したり、'
+   + '<b>✎</b>で言葉を書き直したり、<b>🗑</b>でいらない言葉を消したりできます。'
+   + '消しても、保存済みの記録に書かれた言葉はそのまま残ります。</li>'
    + '<li>思いつかない日は、何も選ばずに次へ進んでかまいません。</li></ul>'
    + '<p>決まったら、下の<b>「タイマーへ →」</b>を押します。</p>';
 
@@ -1161,9 +1324,15 @@ function helpHTML(){
 
   h+='<div class="hstep"><div class="hnum">3</div><div class="htitle">今日の出来を書き残す</div></div>';
   h+=picTabs(2);
-  h+='<p>終わった項目には自動でチェックが入っています。'
-   + 'そのあと、体・心・思考の調子と、気づきを書きます。</p>'
-   + '<ul><li>全部書かなくてかまいません。ひとつでも書けば保存できます。</li>'
+  h+='<p><b>「今日の項目」は、タイマーで終えた項目がそのまま並びます。</b>'
+   + 'ここで押すところはありません。飛ばした項目は「していません」と出ます。</p>'
+   + '<p>そのあと、<b>体・心・声呼吸の調子</b>、<b>次回、意識したいこと</b>、'
+   + '<b>気づき</b>を書きます。</p>'
+   + '<ul><li>「次回、意識したいこと」に書いた言葉は、'
+   + '<b>「1 意識」の先頭に並びます</b>。次にアプリを開いたとき、すぐ選べます。</li>'
+   + '<li>書いた言葉は<b>✎</b>で直せます。<b>🗑</b>で消しても、'
+   + '保存済みの記録に書かれた言葉はそのまま残ります。</li>'
+   + '<li>全部書かなくてかまいません。ひとつでも書けば保存できます。</li>'
    + '<li>書けたら、画面の下にある<b>赤い「記録を保存」</b>を押します。</li>'
    + '<li>途中で閉じても、書きかけは残っています。</li></ul>';
 
@@ -1734,6 +1903,13 @@ function unlockAudioOnce(){
 }
 document.addEventListener("touchend",unlockAudioOnce,true);
 document.addEventListener("click",unlockAudioOnce,true);
+
+/* iOS Safari ignores user-scalable=no, so pinch has to be turned away here as
+   well. touch-action:manipulation on the body covers the double tap; these are
+   the two-finger gestures it does not. */
+["gesturestart","gesturechange","gestureend"].forEach(function(g){
+  document.addEventListener(g,function(e){ e.preventDefault(); },{passive:false});
+});
 /* Safari can suspend the context when the page is backgrounded. */
 document.addEventListener("visibilitychange",function(){
   if(document.hidden){ if(cloudHandle) flushCloud(); return; }
