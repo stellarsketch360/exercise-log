@@ -39,6 +39,10 @@
   .tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--red);}
   .sec{margin-bottom:26px;}
   .lbl{margin-bottom:10px;}
+  .lblrow{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px;}
+  .lblrow .cue{margin:0;}
+  .setname2{flex:0 1 auto;min-width:0;font-family:var(--serif);font-size:14px;color:var(--red);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .row{display:flex;gap:12px;}
   /* 16px is the threshold below which iOS Safari zooms the page in when a field
      is focused — and it will not zoom back out. Every field is at or above it. */
@@ -194,6 +198,12 @@
   .setcard.on .setchev{border-color:var(--red);}
   .setname{flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .setcard.on .setname{color:var(--red);}
+  /* Rendered on every card and shown only on the chosen one, so that picking a
+     set is a class change applySetOpen can make without a rebuild. A red
+     border alone was too quiet to answer "which one am I on?". */
+  .seton{display:none;flex:0 0 auto;font-family:var(--mono);font-size:10.5px;color:#fff;
+    background:var(--red);border-radius:999px;padding:4px 9px;white-space:nowrap;}
+  .setcard.on .seton{display:block;}
   .setmeta{flex:0 0 auto;font-family:var(--mono);font-size:11px;color:var(--dim);}
   .setgo{flex:0 0 auto;width:38px;height:38px;border-radius:50%;border:none;background:var(--red);
     color:#fff;font-size:13px;padding:0 0 0 2px;cursor:pointer;display:grid;place-items:center;}
@@ -649,8 +659,9 @@ function sample(){
   function day(b){ var d=new Date(base); d.setDate(d.getDate()-b); return dayKey(d); }
   var src=allItems();
   if(!src.length) src=clone(DEF_ITEMS);
+  var sn=(activeSet()||{}).name||"";
   function mk(b,t,flags,fo,nx,cond,cm){
-    return {id:uid(),date:day(b),time:t,focus:fo||[],next:nx||[],
+    return {id:uid(),date:day(b),time:t,set:sn,focus:fo||[],next:nx||[],
       comment:cm||"",cond:cond||"",
       items:src.map(function(e,i){
         return {exId:e.id,name:e.name,sec:e.sec,done:flags[i%flags.length]===1,note:""};
@@ -743,6 +754,15 @@ function menuItems(){
     if(!list.some(function(o){ return o.id===t.id; })) list.push(t);
   });
   return list;
+}
+/* The set the day was run from. An old record keeps the name it was saved
+   under, even if that set has since been renamed or deleted; records written
+   before the name was stored simply have none. */
+function draftSetName(){
+  var s=editingId?findSession(editingId):null;
+  if(s) return s.set||"";
+  var a=activeSet();
+  return a?a.name:"";
 }
 /* Records written before durations were kept carry no sec; fall back to what
    the item is set to now, and to nothing if it has since been deleted. */
@@ -861,6 +881,10 @@ function focusEditorHTML(){
   /* Editing swaps the chips out rather than sitting beside them — the same
      words twice over would only be confusing. */
   if(presetEditing){
+    /* ✎ and 🗑 look like what they do. ★ does not — nothing visibly happens
+       until the list is long enough for the order to matter. */
+    h+='<div class="small" style="margin:14px 0 0;line-height:1.7">'
+     + '★ を押すと、よく使う言葉としていちばん上に並びます。</div>';
     h+='<div class="mlist">';
     sorted.forEach(function(p){
       h+='<div class="mrow"><span class="mname s">'+esc(p.text)+'</span>'
@@ -937,7 +961,13 @@ function recordHTML(){
   /* Whatever is ticked on the メニュー screen, read-only. The timer is an
      extra, not the way in — someone who only ever writes still ticks their
      items there, so that is the one place the day's menu is decided. */
-  h+='<div class="sec"><div class="cue lbl">今日の項目</div>';
+  /* Named, because with more than one set "はしる 1分" on its own does not say
+     which of them the day was run from. */
+  var sn=draftSetName();
+  h+='<div class="sec">'
+   + (sn ? '<div class="lblrow"><div class="cue">今日の項目</div>'
+         + '<div class="setname2">'+esc(sn)+'</div></div>'
+        : '<div class="cue lbl">今日の項目</div>');
   var mi=menuItems();
   if(!mi.length){
     h+='<div class="empty">まだ何も選ばれていません。</div>'
@@ -1111,7 +1141,7 @@ saveBtn.onclick=function(){
   });
   var editing=!!editingId;
   var session={id:editingId||uid(),date:draft.date,time:draft.time,items:recItems,
-    focus:draft.focus.slice(),next:draft.next.slice(),
+    set:draftSetName(),focus:draft.focus.slice(),next:draft.next.slice(),
     comment:draft.comment.trim(),cond:draft.cond.trim()};
   if(editing){
     /* The date may have moved, so restore newest-first order. */
@@ -1279,7 +1309,8 @@ function reviewHTML(){
       }
       /* Listed plainly, the same as on the record screen. A ✓ against some and
          not others would be the「していません」column all over again. */
-      h+='<div class="csec"><div class="clbl">項目</div>';
+      h+='<div class="csec"><div class="clbl">項目'
+       + (s.set?'　/　'+esc(s.set):"")+'</div>';
       s.items.forEach(function(i){
         h+='<div class="item d"><span class="iname">'+esc(i.name)+'</span>'
          + '<span class="isec">'+fmtDur(itemSec(i))+'</span></div>';
@@ -1369,7 +1400,10 @@ function helpHTML(){
   h+='<ul><li>セットの名前の部分を押すと開きます。'
    + '<b>項目の左のチェックを外すと、その日はお休みになります</b>（項目は消えません）。</li>'
    + '<li>開いた中で、項目の追加・名前・時間の変更もできます。</li>'
-   + '<li>セットはいくつでも作れます。時間のある日や無い日で使い分けてください。</li></ul>';
+   + '<li>セットはいくつでも作れます。時間のある日や無い日で使い分けてください。</li>'
+   + '<li>セットを押して開くと、そのセットが今日のぶんになります。'
+   + '選ばれているセットには<b>「✓ 選択中」</b>が付き、その名前は'
+   + '「3 記録」の「今日の項目」にも出ます。</li></ul>';
   h+='<p><b>タイマーは使っても使わなくてもかまいません。</b>'
    + '時間を測りたいときだけ、赤い丸の ▶ を押してください。'
    + '選んだ項目を順に測ってくれます。</p>'
@@ -1571,6 +1605,7 @@ function setCardHTML(s){
    + '<div class="sethead" data-setopen="'+s.id+'">'
    + '<span class="setchev"></span>'
    + '<span class="setname">'+esc(s.name)+'</span>'
+   + '<span class="seton">✓ 選択中</span>'
    + '<span class="setmeta">'+n+'項目 · '+fmtDur(setSelDur(s))+'</span>'
    /* Sits in the header so a set can be started without unfolding it. */
    + '<button class="setgo" data-sstart="'+s.id+'" aria-label="スタート"'
