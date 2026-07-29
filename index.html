@@ -139,8 +139,6 @@
   .mday.empty{background:transparent;}
   .mday.on{background:var(--red);color:#fff;}
   .mday.future{opacity:.35;}
-  .mday.today{border-color:var(--ink);color:var(--ink);font-weight:700;}
-  .mday.today.on{color:#fff;}
   .small{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-bottom:14px;}
   /* Set a size up from the rest of the app — this page is meant to be read. */
   .help{font-size:15px;line-height:1.95;}
@@ -1182,7 +1180,9 @@ function streaks(){
 /* A real calendar, month by month: weekdays across the top, dates in the
    squares. The previous grid ran weeks down the columns, which is compact but
    reads like nothing anyone has seen on a wall, and gave no way to tell which
-   row was which weekday or where today sat. */
+   row was which weekday. Today is not marked — the colours are about the run
+   of days, and a box around one of them only competed with that. todayK is
+   still needed to dim the days that have not happened yet. */
 function monthGrid(y,m){
   var done=doneDates(), todayK=dayKey(new Date());
   var first=new Date(y,m,1), lastDay=new Date(y,m+1,0).getDate();
@@ -1193,8 +1193,7 @@ function monthGrid(y,m){
   for(var i=0;i<first.getDay();i++) h+='<div class="mday empty"></div>';
   for(var d=1;d<=lastDay;d++){
     var k=y+"-"+pad(m+1)+"-"+pad(d);
-    h+='<div class="mday'+(done[k]?" on":"")+(k===todayK?" today":"")
-     + (k>todayK?" future":"")+'">'+d+'</div>';
+    h+='<div class="mday'+(done[k]?" on":"")+(k>todayK?" future":"")+'">'+d+'</div>';
   }
   return h+'</div></div>';
 }
@@ -1215,7 +1214,7 @@ function calendarHTML(){
     var d=new Date(t.getFullYear(),t.getMonth()-i,1);
     out+=monthGrid(d.getFullYear(),d.getMonth());
   }
-  out+='<div class="statnote">色のついた日が、記録をつけた日です。太い枠が今日です。</div>';
+  out+='<div class="statnote">色のついた日が、記録をつけた日です。</div>';
   if(calAll || monthsOfHistory()>1){
     out+='<button class="ghost sm" id="calall" style="margin-top:12px">'
      + (calAll?"今月だけ表示する":"すべての記録を見る")+'</button>';
