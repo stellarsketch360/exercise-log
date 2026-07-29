@@ -73,7 +73,6 @@
   .exrow{display:flex;align-items:center;gap:10px;padding:13px 14px;border-bottom:1px solid var(--line);}
   .exrow:last-child{border-bottom:none;}
   .exrow.done{background:rgba(158,58,70,.04);}
-  .exrow.skip{color:var(--dim);}
   .box{width:22px;height:22px;border:1.5px solid var(--line);border-radius:6px;flex:0 0 auto;
     display:grid;place-items:center;color:transparent;font-size:13px;font-weight:700;}
   .box.on{background:var(--red);border-color:var(--red);color:#fff;}
@@ -355,11 +354,12 @@ function normSets(list){
   });
 }
 /* Early versions seeded a 15-second item for trying the timer out. It is gone
-   from the defaults; drop the one already saved too, but only while it is
-   untouched — a renamed or retimed one is the user's now. */
+   from the defaults, and gets swept out of saved sets too. Matching on the id
+   alone missed the copies that had been through an export or a re-add and come
+   back with a fresh one, so the seeded name is what identifies it. */
 function dropSeededTest(list){
   return list.filter(function(t){
-    return !(t.id==="i_test" && t.name==="15秒のテスト" && t.sec===15);
+    return t.name!=="15秒のテスト";
   });
 }
 /* There used to be a single list of items. It becomes セット1 so that nothing
@@ -643,6 +643,54 @@ function resetAll(){
   persist(); cloudDeleteAllSessions();
 }
 
+/* ---------- sample data (opt-in) ----------
+   A few weeks of plausible records, so the まとめ screens can be looked at
+   without first waiting three weeks. Built from whatever items are actually
+   set up, so the totals and the実施率 line up with the real menu. The gaps in
+   the dates are deliberate — a run with no breaks in it would make the streak
+   and the calendar look like nothing anyone would really produce. */
+function sample(){
+  var base=new Date();
+  function day(b){ var d=new Date(base); d.setDate(d.getDate()-b); return dayKey(d); }
+  var src=allItems();
+  if(!src.length) src=clone(DEF_ITEMS);
+  function mk(b,t,flags,fo,nx,cond,cm){
+    return {id:uid(),date:day(b),time:t,focus:fo||[],next:nx||[],
+      comment:cm||"",cond:cond||"",
+      items:src.map(function(e,i){
+        return {exId:e.id,name:e.name,sec:e.sec,done:flags[i%flags.length]===1,note:""};
+      })};
+  }
+  return [
+    mk(0,"07:40",[1,1],["オープン","周りを見る"],["肩の力を抜く"],
+      "体は軽い。心は落ち着いている。声もよく出た。","椅子で肩がゆるんでから、声が前に出るようになった。"),
+    mk(1,"08:10",[1,0],["いつもと違う動きをする"],[],
+      "体は重い。心は少しあせっている。息が浅い。",""),
+    mk(2,"07:55",[1,1],["オープン"],["息を止めない"],
+      "体はふつう。心は静か。声はかすれ気味。","急ごうとしていた。途中で気づいて戻せた。"),
+    mk(4,"22:30",[1,1],["周りを見る"],[],
+      "夜だと体が固い。心は疲れている。","夜にやると集中が散る。朝のほうがいい。"),
+    mk(5,"07:30",[1,1],["オープン","いつもと違う動きをする"],["朝にやる"],
+      "体も心も軽い。声がよく響いた。","全部通せた日。"),
+    mk(7,"08:00",[1,0],[],[],"時間がなくて駆け足だった。",""),
+    mk(8,"07:45",[1,1],["息を止めない"],[],
+      "体はほぐれてきた。心は落ち着いている。",""),
+    mk(10,"09:00",[0,1],["周りを見る"],["視野を広く"],
+      "体は少しだるい。心は前向き。","個人のほうだけやった。視野が開く感じがあった。"),
+    mk(11,"07:50",[1,1],["オープン"],[],"体はふつう。声は出しやすい。",""),
+    mk(13,"08:20",[1,1],["息を止めない","周りを見る"],[],
+      "体は軽い。心は静か。","判断をやめると楽になる。"),
+    mk(16,"07:35",[1,1],["オープン","いつもと違う動きをする"],["この感じを覚えておく"],
+      "体も心も調子がいい。声がいちばん出た日。","久しぶりに良い手応え。"),
+    mk(19,"08:05",[1,0],[],[],"なんとなく終わった。",
+      "意識することを決めずに始めてしまった。"),
+    mk(22,"07:40",[1,1],["オープン","周りを見る"],[],
+      "体は重いが、やってみたら心はほぐれた。",""),
+    mk(24,"08:15",[1,1],["いつもと違う動きをする"],["続けること"],
+      "初日。体が固い。声もあまり出ない。","まずは続けてみる。")
+  ];
+}
+
 /* ---------- render ---------- */
 var view=document.getElementById("view");
 var savebar=document.getElementById("savebar");
@@ -890,18 +938,18 @@ function recordHTML(){
     h+='<button class="ghost sm" id="backFocus">意識することを変える</button></div>';
   }
 
-  /* Read-only: what is ticked here was ticked by the timer as each item ran. */
+  /* Read-only, and only what was actually done: the timer ticks each item off
+     as it finishes, and this is here to look back over. Listing what was *not*
+     done would read as a scolding to anyone who skips the timer and only
+     writes, which is a perfectly good way to use the app. */
   h+='<div class="sec"><div class="cue lbl">今日の項目</div>';
-  var mi=menuItems();
-  if(!mi.length) h+='<div class="empty">タイマーを動かすと、終えた項目がここに出ます。</div>';
+  var mi=menuItems().filter(function(e){ return !!draft.done[e.id]; });
+  if(!mi.length) h+='<div class="empty">今日おこなった項目がここに出ます。</div>';
   else {
     h+='<div class="ex">';
     mi.forEach(function(e){
-      var on=!!draft.done[e.id];
-      h+='<div class="exrow'+(on?" done":" skip")+'">'
-       + '<div class="exname">'+esc(e.name)+'</div>'
-       + '<div class="exsec">'+(on?fmtDur(draftSec(e)):"していません")+'</div>'
-       + '</div>';
+      h+='<div class="exrow done"><div class="exname">'+esc(e.name)+'</div>'
+       + '<div class="exsec">'+fmtDur(draftSec(e))+'</div></div>';
     });
     h+='</div>';
   }
@@ -1325,7 +1373,8 @@ function helpHTML(){
   h+='<div class="hstep"><div class="hnum">3</div><div class="htitle">今日の出来を書き残す</div></div>';
   h+=picTabs(2);
   h+='<p><b>「今日の項目」は、タイマーで終えた項目がそのまま並びます。</b>'
-   + 'ここで押すところはありません。飛ばした項目は「していません」と出ます。</p>'
+   + '今日なにをしたかを見るためのもので、ここで押すところはありません。'
+   + 'タイマーを使わなかった日は、何も並びません。書くところだけ使ってかまいません。</p>'
    + '<p>そのあと、<b>体・心・声呼吸の調子</b>、<b>次回、意識したいこと</b>、'
    + '<b>気づき</b>を書きます。</p>'
    + '<ul><li>「次回、意識したいこと」に書いた言葉は、'
@@ -1849,6 +1898,7 @@ function openSheet(){
   }
 
   h+='<div class="cue" style="margin-top:24px">データ</div>'
+   + '<button class="ghost" id="demo">サンプルの記録を入れる（お試し用）</button>'
    + '<button class="ghost" id="wipe">記録をすべて削除</button>'
    + '</div></div>';
   modal.innerHTML=h;
@@ -1867,6 +1917,14 @@ function openSheet(){
     el.onclick=function(){ alarmType=el.getAttribute("data-selalarm"); save("act:alarm",alarmType);
       ensureAudio(); playBeep(alarmType); openSheet(); };
   });
+  document.getElementById("demo").onclick=function(){
+    if(!confirm("お試し用のサンプル記録を入れますか？\n今ある記録に追加されます。あとで「記録をすべて削除」で消せます。")) return;
+    var s=sample();
+    sessions=s.concat(sessions);
+    persist(); cloudAddSessions(s);
+    close(); tab="review"; sub="history"; expanded=null; setTab(); render();
+    toast("サンプルを追加しました");
+  };
   document.getElementById("wipe").onclick=function(){
     if(confirm("記録をすべて削除しますか？\n削除すると元に戻せません。")){
       sessions=[]; editingId=null; expanded=null; preEditDraft=null;
