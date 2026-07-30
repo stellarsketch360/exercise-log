@@ -1,21 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- App icon: a clock face whose ring doubles as a progress arc.
-       Square and opaque on purpose — iOS masks its own rounded corners over
-       the top, and puts black behind anything transparent. -->
-  <rect width="1024" height="1024" fill="#F7F4EE"/>
-  <g fill="none" stroke-linecap="round">
-    <!-- the face -->
-    <circle cx="512" cy="512" r="380" stroke="#E2C4CA" stroke-width="44"/>
-    <!-- elapsed, from 12 o'clock clockwise to 4 -->
-    <path d="M512 132 A380 380 0 0 1 841 702" stroke="#9E3A46" stroke-width="44"/>
-    <!-- quarter marks -->
-    <g stroke="#E2C4CA" stroke-width="24">
-      <path d="M512 250 V300"/>
-      <path d="M774 512 H724"/>
-      <path d="M512 774 V724"/>
-      <path d="M250 512 H300"/>
+  <!-- App icon: a chair seen from the side, inside a clock face whose ring
+       doubles as a progress arc. Traced from the supplied artwork — every
+       radius, stroke and endpoint below was measured off it, so leave the
+       numbers alone unless the drawing itself changes.
+       Square and opaque on purpose: iOS masks its own rounded corners over
+       the top, and fills anything transparent with black. -->
+  <rect width="1024" height="1024" fill="#2C2C2A"/>
+  <g fill="none" stroke="#EDE4D5">
+    <!-- the face, and the quarter marks, at 45% over the background -->
+    <g opacity="0.45">
+      <circle cx="512" cy="512" r="418" stroke-width="25"/>
+      <g stroke-width="38" stroke-linecap="round">
+        <path d="M512 288 V226"/>
+        <path d="M736 512 H798"/>
+        <path d="M512 736 V798"/>
+        <path d="M288 512 H226"/>
+      </g>
     </g>
-    <!-- hands, drawn as one stroke so the corner joins cleanly -->
-    <path d="M512 340 V600 H350" stroke="#9E3A46" stroke-width="54" stroke-linejoin="round"/>
+    <!-- elapsed: 12 o'clock round to 3, flat ended -->
+    <path d="M512 94 A418 418 0 0 1 930 512" stroke-width="75"/>
+    <!-- the chair: front leg into the seat, and the back post through it -->
+    <g stroke-width="50" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M384 732 V592 H652"/>
+      <path d="M652 352 V732"/>
+    </g>
   </g>
 </svg>
