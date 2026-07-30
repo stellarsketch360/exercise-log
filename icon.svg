@@ -1,14 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <!-- App icon: a chair seen from the side, inside a clock face whose ring
-       doubles as a progress arc. Traced from the supplied artwork — every
-       radius, stroke and endpoint below was measured off it, so leave the
-       numbers alone unless the drawing itself changes.
+       doubles as a progress arc. Every radius, stroke and endpoint was
+       measured off the supplied artwork, so leave the numbers alone unless
+       the drawing itself changes.
        Square and opaque on purpose: iOS masks its own rounded corners over
-       the top, and fills anything transparent with black. -->
-  <rect width="1024" height="1024" fill="#2C2C2A"/>
-  <g fill="none" stroke="#EDE4D5">
-    <!-- the face, and the quarter marks, at 45% over the background -->
-    <g opacity="0.45">
+       the top, and fills anything transparent with black.
+       Two palettes live here. This file is the browser-tab icon, where the
+       media query does the switching; the PNGs beside it are this same file
+       rendered under a forced colour scheme. -->
+  <style>
+    svg { --ground:#F7F4EE; --mark:#9E3A46; --faint:#E2C4CA; }
+    @media (prefers-color-scheme: dark) {
+      svg { --ground:#2C2C2A; --mark:#EDE4D5; --faint:#837F77; }
+    }
+  </style>
+  <rect width="1024" height="1024" fill="var(--ground)"/>
+  <g fill="none">
+    <!-- the face, and the quarter marks -->
+    <g stroke="var(--faint)">
       <circle cx="512" cy="512" r="418" stroke-width="25"/>
       <g stroke-width="38" stroke-linecap="round">
         <path d="M512 288 V226"/>
@@ -17,12 +26,14 @@
         <path d="M288 512 H226"/>
       </g>
     </g>
-    <!-- elapsed: 12 o'clock round to 3, flat ended -->
-    <path d="M512 94 A418 418 0 0 1 930 512" stroke-width="75"/>
-    <!-- the chair: front leg into the seat, and the back post through it -->
-    <g stroke-width="50" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M384 732 V592 H652"/>
-      <path d="M652 352 V732"/>
+    <g stroke="var(--mark)">
+      <!-- elapsed: 12 o'clock round to 3, flat ended -->
+      <path d="M512 94 A418 418 0 0 1 930 512" stroke-width="75"/>
+      <!-- the chair: front leg into the seat, and the back post through it -->
+      <g stroke-width="50" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M384 732 V592 H652"/>
+        <path d="M652 352 V732"/>
+      </g>
     </g>
   </g>
 </svg>
