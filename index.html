@@ -641,7 +641,16 @@ if(fbReady){
     if(c.indexOf("credential-already-in-use")>=0) return adoptExisting(e);
     if(c) authFailed(e);
   });
-  firebase.auth().signInAnonymously().catch(syncFailed);
+  /* No signInAnonymously() here. It looks harmless — "sign in if nobody is" —
+     but the SDK only short-circuits for an account that is *already anonymous*:
+
+       if (auth.currentUser?.isAnonymous) return currentUser;
+       const response = await signUp(...);   // otherwise: a brand new account
+
+     A Google-linked account has isAnonymous === false, so calling it on every
+     load replaced that account with a fresh anonymous one and signed the user
+     out. onAuthStateChanged above already covers the no-account case, which is
+     the only case that needs covering. */
 }
 
 /* Puts every setting and the whole log back to a first-launch state. */
