@@ -321,6 +321,10 @@ var firebaseConfig = {
 var fbReady = firebaseConfig.apiKey.indexOf("YOUR_") !== 0;
 var db=null, uidRef=null, synced=false, syncError="";
 var authUser=null, authBusy=false, authError="", unsubs=[], pendingCarry=null, syncPrimed=false, signingOut=false;
+/* What this device was holding at the moment it signed into an account that
+   already existed. Captured before the switch, because the account's own copy
+   lands on top of the live values as soon as its snapshot arrives. */
+var pendingCarrySets=null, pendingCarryPresets=null;
 
 /* ---------- storage (localStorage + memory fallback, used as offline cache) ---------- */
 var mem={}, canStore=true;
@@ -369,6 +373,61 @@ function normSets(list){
   return (list||[]).map(function(s){
     return {id:s.id||uid(),name:s.name||"セット",items:dropSeededTest(normItems(s.items))};
   });
+}
+/* The menu as an account's document holds it. d.items is the flat list older
+   builds wrote and d.timers the one before that; either becomes a single set. */
+function setsFromDoc(d,fallback){
+  return d.sets ? normSets(d.sets)
+    : (d.items || d.timers) ? [{id:"set1",name:"セット1",items:normItems(d.items||d.timers)}]
+    : fallback;
+}
+
+/* ---------- merging a device into an account ----------
+   Records merge by id: they are events, and the same event never happens
+   twice. The menu and the cues are settings, so they merge by the text on
+   screen instead — a cue typed on two devices is one cue, whatever ids the
+   two copies happen to carry. Nothing is dropped from either side; where both
+   have the same name, the account's copy stays and the device's is folded in. */
+function mkey(s){ return String(s==null?"":s).trim(); }
+function freeId(list,want){
+  var taken={}; list.forEach(function(x){ taken[x.id]=1; });
+  var v=want||uid();
+  while(taken[v]) v=uid();
+  return v;
+}
+function mergeItems(base,extra){
+  var out=base.slice(), seen={};
+  out.forEach(function(i){ seen[mkey(i.name)]=1; });
+  (extra||[]).forEach(function(i){
+    if(seen[mkey(i.name)]) return;
+    out.push({id:freeId(out,i.id),name:i.name,sec:i.sec});
+    seen[mkey(i.name)]=1;
+  });
+  return out;
+}
+function mergeSets(base,extra){
+  var out=base.map(function(s){ return {id:s.id,name:s.name,items:(s.items||[]).slice()}; });
+  var byName={}; out.forEach(function(s){ byName[mkey(s.name)]=s; });
+  (extra||[]).forEach(function(s){
+    var hit=byName[mkey(s.name)];
+    if(hit){ hit.items=mergeItems(hit.items,s.items); return; }
+    var ns={id:freeId(out,s.id),name:s.name,items:(s.items||[]).slice()};
+    out.push(ns); byName[mkey(s.name)]=ns;
+  });
+  return out;
+}
+function mergePresets(base,extra){
+  var out=base.map(function(p){ return {id:p.id,text:p.text,pinned:!!p.pinned}; });
+  var byText={}; out.forEach(function(p){ byText[mkey(p.text)]=p; });
+  (extra||[]).forEach(function(p){
+    var hit=byText[mkey(p.text)];
+    /* Starred on either side is starred: the star is a note to self, and
+       losing it on the device that set it is the surprising outcome. */
+    if(hit){ if(p.pinned) hit.pinned=true; return; }
+    var np={id:freeId(out,p.id),text:p.text,pinned:!!p.pinned};
+    out.push(np); byText[mkey(p.text)]=np;
+  });
+  return out;
 }
 /* Early versions seeded a 15-second item for trying the timer out. It is gone
    from the defaults, and gets swept out of saved sets too. Matching on the id
@@ -504,7 +563,18 @@ function startSync(u){
          starts as a copy of whatever this device already had. */
       userDoc.set({sets:sets,presets:presets});
       if(sessions.length) cloudAddSessions(sessions);
+    } else if(pendingCarrySets || pendingCarryPresets){
+      /* Signed into an account that was already there. Its menu and cues are
+         about to replace this device's, so fold this device's into them first
+         and write the result back; the snapshot then brings it to every
+         device, this one included. */
+      var d=snap.data()||{};
+      userDoc.set({
+        sets: mergeSets(setsFromDoc(d,[]), pendingCarrySets||[]),
+        presets: mergePresets(d.presets||[], pendingCarryPresets||[])
+      },{merge:true});
     }
+    pendingCarrySets=null; pendingCarryPresets=null;
     if(pendingCarry && pendingCarry.length){ cloudAddSessions(pendingCarry); }
     pendingCarry=null;
   }).catch(syncFailed);
@@ -514,9 +584,7 @@ function startSync(u){
     var d=snap.data();
     /* d.items is the flat list older builds wrote, d.timers the one before
        that; either becomes a single set. */
-    var nextSets = d.sets ? normSets(d.sets)
-      : (d.items || d.timers) ? [{id:"set1",name:"セット1",items:normItems(d.items||d.timers)}]
-      : sets;
+    var nextSets = setsFromDoc(d,sets);
     var nextPresets = d.presets || presets;
     /* Our own writes echo back here. Re-rendering on those would rebuild the
        view under the user and drop the caret mid-edit. */
@@ -585,6 +653,10 @@ function adoptExisting(e){
   if(!cred) return authFailed(e);
   if(sessions.length && confirm("このGoogleアカウントには、すでに記録が保存されています。\nこの端末にある記録"+sessions.length+"件も引き継ぎますか？"))
     pendingCarry=sessions.slice();
+  /* The menu and the cues are folded in without asking. Merging only ever adds
+     — same-named entries collapse into one — so there is nothing to weigh up
+     and nothing to lose by doing it. */
+  pendingCarrySets=sets.slice(); pendingCarryPresets=presets.slice();
   firebase.auth().signInWithCredential(cred)
     .then(function(){ authDone("ログインしました"); })
     .catch(authFailed);
